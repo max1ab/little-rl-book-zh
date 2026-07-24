@@ -30,6 +30,13 @@
 | off-policy | 异策略 | 首次出现附英文 |
 | temporal difference | 时序差分 | 简写 TD |
 | advantage | 优势函数 |  |
+| Markov property | 马尔可夫性质 |  |
+| Markov Decision Process | 马尔可夫决策过程 | 简写 MDP |
+| transition function | 转移函数 |  |
+| training loop | 训练循环 | 与交互循环区分 |
+| reward hacking | 奖励黑客 | 首次出现附英文 |
+| exploration | 探索 |  |
+| exploitation | 利用 |  |
 
 ## 校对清单
 
