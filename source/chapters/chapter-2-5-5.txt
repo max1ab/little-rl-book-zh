@@ -1,0 +1,80 @@
+Blurring the line between
+
+SFT and RL
+
+In parallel, some methods propose to blur the line
+between SFT and RL in order to leverage the strength
+of both approaches. Indeed, one of the main advantages of RL is that it performs on-policy training, i.e.
+it learns from situations that it actually encounters,
+rather than from situations encountered by an expert
+
+128
+
+or a teacher. This is much more robust (as the student is likely to drift from the expert’s situations at
+inference) and enables grounding [Carta et al. 2023].
+But RL provides a sparse learning signal. On the
+other hand, SFT provides a dense learning signal but
+performs off-policy training.
+On-Policy Distillation [Lu et al. 2025], which can
+be viewed as a token-level version of DAgger [Ross
+et al. 2011] applied in the LLM context, samples situations from a student model and uses a teacher model
+to provide targets on these situations. It thus combines the advantages of on-policy training with a
+dense learning signal.
+1. on-policy rollout
+s ∼ πθ
+
+Student
+πθ
+
+Teacher
+πT
+
+∇θ KL
+πT (· | s)
+
+2. dense supervision
+
+Figure 5.5: On-Policy Distillation.
+
+Multiple works have shown that SFT tends to induce
+memorization and RL generalization [Chu et al. 2025;
+
+129
+
+Shenfeld et al. 2025]. DFT (Dynamic Fine-Tuning,
+[Wu et al. 2026]) may offer an explanation by rewriting the SFT objective as a policy gradient objective:
+"
+∇θ J
+
+SFT
+
+(θ) = Ex∼D,y∼πθ (·|x)
+#
+w(y | x)∇θ log πθ (y | x)r(x, y)
+
+with:
+w(y | x) =
+
+1
+,
+πθ (y | x)
+
+r(x, y) = I{y = y ∗ }
+
+So SFT can be seen as policy gradient with a reward
+that is 1 if the model output matches the target and 0
+otherwise weighted by a scalar that inflates updates
+on low-probability targets and biases the model toward memorizing specific (x, y ⋆ ) pairs instead of
+learning a generalizable policy.
+
+130
+
+Chapter 6
+
+AlphaGo Zero
+This chapter aims at giving a high-level overview of
+the famous AlphaGo Zero algorithm under the prism
+of the concepts we have built throughout the book.
+You will find the ingredients of AlphaGo Zero familiar but assembled in a quite different way from
+what we have seen in the algorithms of either the
+value-based or policy-based families.

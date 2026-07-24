@@ -1,0 +1,120 @@
+RL Infrastructure
+
+While the pseudocode of GRPO fits in fewer than 30
+lines, implementing an efficient RLVR training loop is
+a substantial systems engineering effort [Team Olmo
+et al. 2025; Prime Intellect Team et al. 2025].
+It relies on two main components:
+• the trainer, which consumes batches of experience and runs GRPO (or other) to update the
+policy weights.
+• the inference engine, which collects rollouts
+by executing the policy in the environment.
+It can involve tool use (like web requests) or
+code execution.
+
+123
+
+Each typically runs on multiple interconnected GPU
+nodes. The process thus mixes two very different
+workloads: training (compute-bound) and inference
+(memory bandwidth-bound), each with a different
+framework (Megatron or TorchTitan vs. vLLM or
+SGLang). The two must communicate and be orchestrated to minimize idle time on either side. Another difficulty is that as training progresses, the
+policy tends to generate longer rollouts (longer reasoning chains, more tool calls, . . . ), which makes
+inference disproportionately more expensive due to
+the quadratic cost of attention in sequence length.
+
+124
+
+Trainer
+compute-bound
+Megatron, TorchTitan
+
+updated
+weights
+
+batch of
+rollouts
+
+Inference engine
+memory-bandwidth-bound
+vLLM, SGLang
+
+Figure 5.3: The two main components of an RLVR
+training loop. Each side is itself a fleet of GPU nodes,
+the inference fleet being allocated several times more
+GPU than the trainer (e.g. 3:1 ratio).
+
+Several optimizations can be implemented to improve overall hardware utilization:
+• Asynchronous training and inference. The
+two components run in parallel without waiting for each other. Typically, after having collected a batch of rollouts, the inference engine
+doesn’t wait for updated weights from this
+batch to start collecting the next one. This
+makes the rollouts collected with an older policy and thus introduce off-policyness.
+125
+
+• Continuous batching. There is a lot of discrepancy between different rollouts in a same
+batch (response length, tool use, . . . ) and thus
+a lot of time can be lost waiting for the longest
+rollout to finish before starting the next batch.
+Continuous batching repopulates a rollout slot
+as soon as it is finished.
+• In-Flight weight updates. This technique
+makes the inference engine continuously poll
+the trainer for new weights, thus using the latest policy as soon as it is available. This leads to
+a single rollout being generated with multiple
+policies, but in a sense limits off-policyness.
+These optimizations are a trade-off between hardware efficiency and algorithmic fidelity, more particularly off-policyness.
+
+126
+
+π0
+
+π1
+
+π2
+
+trainer
+
+inference
+
++ asynchrone
+
++ continuous
+batching
+
++ in-flight
+weight updates
+
+Figure 5.4: Overview of the different optimizations
+to improve hardware utilization in an RLVR training
+loop. The blue color intensity indicates the policy
+used to generate each rollout segment.
+
+Another consideration to take into account is the mismatch between the training and inference engines.
+These are exacerbated by the presence of Mixture Of
+Experts (MoE) which can, from a slight numerical difference, route tokens to different experts which further increase the training-inference mismatch. The
+
+127
+
+rollout policy, denoted as µθ , while using the same
+weights as the training policy πθ , thus produces different outputs which biases the gradient estimator.
+One fix [F. Yao et al. 2025] is to take this discrepancy
+into account in another importance sampling ratio:
+πθold (yt |x, y<t )
+µθold (yt |x, y<t )
+which leads to the global importance sampling ratio:
+ρt (θ) =
+
+πθ (yt |x, y<t )
+πθ (yt |x, y<t ) πθold (yt |x, y<t )
+=
+·
+µθold (yt |x, y<t )
+πθold (yt |x, y<t ) µθold (yt |x, y<t )
+
+this ratio corrects the mismatch in action selection: the first ratio corrects for the fact that we perform multiple updates and have therefore drifted
+from the old policy (derived in Section 4.3.2), while
+the second corrects the training-inference mismatch.
+The expectation is now under the rollout policy µθold ,
+and we correct with ρt (θ).

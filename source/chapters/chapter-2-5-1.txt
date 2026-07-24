@@ -1,0 +1,27 @@
+Setup
+
+A prompt x is sampled from a dataset D. The model
+generates a response y = (y1 , . . . , yT ) one token at
+a time, until it emits an end-of-sequence token or
+hits a maximum length.
+• the state at step t is the prompt concatenated with the tokens generated so far,
+St = (x, y<t ).
+• the action is the next token At = yt ∈ V,
+drawn from the vocabulary.
+• in the RLVR setting, the reward is sparse and
+terminal: a verifier scores the full response and
+returns r(x, y) ∈ R.
+• the policy πθ (At | St ) is the LLM itself: it
+gives a distribution over the actions (i.e. the
+next token to generate).
+• transitions are deterministic concatenation,
+St+1 = (St , At ).
+We keep a reference policy πref , typically the SFT
+model we start from. Most LLM RL objectives include
+a KL penalty β · DKL (πθ ∥πref ) that keeps the trained
+
+116
+
+policy close to it. This regularizer prevents collapse
+to degenerate token distributions that exploit the
+reward without producing readable text.

@@ -1,0 +1,117 @@
+VPG vs. PPO
+
+On CartPole, we compare how robust VPG and PPO
+are to re-using the same batch of trajectories for multiple gradient steps. An algorithm capable of doing
+so extracts more information from each batch, and
+thus is more data-efficient.
+
+108
+
+Figure 4.10: Episode return as a function of total
+training environment steps on CartPole, for VPG
+(left) and PPO (right) with K ∈ {1, 4, 16} epochs
+per batch. Because each batch is split into 8 minibatches, each epoch corresponds to 8 gradient steps.
+
+The setting K = 1 gives very similar performance
+for both because, as we noted earlier, the first gradient step of PPO is the same as VPG. However, while
+raising K from 1 to 16 yields faster convergence for
+PPO, it is much more brittle and even leads to irrecoverable policy collapse for VPG. This is explained by
+the following figure:
+
+109
+
+Figure 4.11: Cumulative approximate KL divergence
+between the current policy and the data-generating
+policy, measured per mini-batch gradient step within
+a single iteration (K = 10 epochs × 8 mini-batches
+= 80 steps)
+
+Put differently, PPO makes sure that the new policy
+behaves similarly to the previous one. One could
+argue that using a smaller step size for VPG would
+also make it possible to re-use the same batch, but
+this would control the drift in parameter space rather
+than in policy space. The approximation of the surrogate objective is done with dπθ ≈ dπθold , whose
+validity requires closeness in policy space, which is
+not necessarily obtained by closeness in parameter
+space.
+PPO limits the drift in policy space by stopping the
+gradient on actions which have already drifted too
+far, while still making learning progress on the rest
+of the batch.
+110
+
+Part III
+
+RL at scale
+
+Chapter 5
+
+RL × LLMs
+So far we have built up the RL toolkit on general problems. This chapter applies that toolkit to a specific
+setting: LLM training.
+In this setting, the Large Language Model (LLM) that
+we want to train has already been pretrained on trillions of tokens and is a very powerful conditional
+distribution over text, that we refer to as the base
+model. At that stage, it encodes a lot of knowledge
+but its behaviour is very hard to predict and control,
+making that knowledge difficult to leverage.
+This is why one of the central efforts in the LLM field
+since late 2022 has been fine-tuning base models. The
+most direct option is through supervised fine-tuning
+
+113
+
+(SFT), which consists of collecting demonstrations
+of the desired behaviour and training the model to
+imitate them. While being simple to implement and
+somewhat effective, it requires demonstrations. RL
+on the other hand needs no demonstrations, only a
+reward function that scores model outputs and lets
+the model search for behaviour that scores well.
+This can be preferable to SFT because RL can learn
+behaviour that was never demonstrated such as decomposing a problem, considering alternatives or
+checking its own work. Also, because the signal
+comes from a reward rather than from a fixed humanwritten target, RL can in principle push models past
+the level of any specific human demonstrator.
+Two distinct generations of RL training of LLMs have
+emerged so far.
+First generation: alignment (RLHF). The first
+wave, around 2022, used RL to turn a base model into
+a chatbot or assistant. It consisted first in training a
+reward model able to predict human preferences between two model outputs, and then using that reward
+to fine-tune the base model with RL, i.e., reinforcing
+the generated tokens that led to highly-rewarded sequences. This RLHF (Reinforcement Learning with
+Human Feedback) recipe was very effective and behind the success of products like ChatGPT. However,
+it turned out that RL on its own was not strictly nec114
+
+essary to such alignment procedures. The RL was
+constrained both by how reliable the reward model
+was and by what it actually rewarded. Predicting
+human preferences is quite a shallow signal determined mostly by tone and style. It gives the model
+no incentive to reason, plan, or develop any new
+capability.
+Second generation: reasoning (RLVR). The
+second wave, starting in 2024, uses RL to train
+models in environments with verifiable rewards
+(Reinforcement Learning with Verifiable
+Rewards, RLVR). The most common setup is
+to give the model math problems and reward it
+for producing the correct numerical answer. A
+byproduct of this training setup is that it teaches
+the model to reason and learn thinking actions like
+planning, decomposing a problem, backtracking or
+self-checking. Such verifiable rewards are natural
+to obtain on STEM tasks, where correctness can be
+checked mechanically, but much harder to construct
+for open-ended tasks like creative writing.
+This setup differs from RLHF in that the reward is
+more “interesting” to optimize against (i.e., optimising against it tends to develop or resurface reasoning
+capabilities) and is more robust to reward hacking.
+This makes it practical to run RLVR at much larger
+scale than RLHF, often approaching a non-trivial frac-
+
+115
+
+tion of pretraining (>10%).
+The rest of this chapter focuses on RLVR.

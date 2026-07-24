@@ -1,0 +1,19 @@
+Learning a model
+
+One form this object can take is a model of the environment. This model is trained to predict how the
+environment evolves, typically its next state and reward, from the current state and action (thanks to
+the Markov property). This is called a model-based
+approach. So the direct goal here is not to maximize
+rewards, but to better predict the environment.
+Given the previous batch of experience, update the environment model to better predict
+the future.
+
+26
+
+Once such a model has been learned, it can then be
+used to derive or improve a policy.
+By contrast, model-free methods do not try to explicitly learn a model of the environment. Of course,
+these algorithms may still capture some model of
+the environment implicitly, but they do not learn an
+explicit predictive model that can be used to simulate
+or predict future states and rewards.

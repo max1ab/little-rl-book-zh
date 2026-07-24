@@ -1,0 +1,158 @@
+Between MC and TD
+
+So far we have seen two extremes: MC, which uses
+the full return Gt , and TD, which uses a one-step
+bootstrap Rt+1 + γV (St+1 ). They sit at opposite
+ends of a spectrum, with opposite trade-offs: MC
+has high variance but no bias, TD has low variance
+but introduces bias through bootstrapping. Can we
+interpolate between the two and get the best of both
+worlds?
+
+n-step TD
+Instead of bootstrapping after one step, we sum n
+real rewards and bootstrap on the n-th next state.
+After visiting St , we define the n-step return as:
+(n)
+
+Gt
+
+= Rt+1 +γRt+2 +· · ·+γ n−1 Rt+n +γ n V (St+n ).
+(n)
+
+The update rule is the same as TD, with Gt
+of the one-step target:
+
+in place
+
+ (n)
+
+V (St ) ← V (St ) + α Gt − V (St ) .
+69
+
+Setting n = 1 recovers TD. Taking n large enough to
+reach the terminal state recovers MC. Intermediate
+values of n trade variance against bias: larger n uses
+more real rewards (less bias from bootstrapping) but
+accumulates more randomness (more variance).
+However, a single n is rarely optimal throughout.
+The best choice depends both on the state and on the
+progress of training:
+• Spatially, states whose neighbors have accurate value estimates can use a small n, since the
+bootstrap V (St+n ) is trustworthy, but states
+surrounded by poorly estimated values need a
+larger n to look past the biased bootstrap and
+reach real reward.
+
+70
+
+Figure 3.9: MSE of n-step TD evaluation for every
+state, for different values of n on the 19-state random
+walk. The optimal n varies by state. Near the terminal states (1 and 19), we can afford larger n’s since
+we are near the end. For the middle state, the target
+is very noisy as the rest of the episode is very long,
+so a smaller n is better.
+• Temporally, V is wrong everywhere at the
+start, every bootstrap is biased, and a large n is
+preferable. But as V converges, the optimal n
+drifts down, since bias has been absorbed and
+variance becomes the dominant concern.
+
+71
+
+Figure 3.10: MSE of n-step TD evaluation at different
+times during training, for different values of n on
+the 19-state random walk. The optimal n in white
+decreases as training progresses.
+
+TD(λ)
+Hence, TD(λ) averages all n-step returns at once,
+weighted geometrically by λ ∈ [0, 1]:
+Gλt = (1 − λ)
+
+∞
+X
+n=1
+
+72
+
+(n)
+
+λn−1 Gt .
+
+target
+
+weight
+(1)
+Gt
+
+(1 − λ)
+
+(2)
+
+(1 − λ)λ
+
+Gt
+
+(3)
+
+(1 − λ)λ2
+
+Gt
+..
+.
+
+..
+.
+
+· · · T Gt
+
+λT −1
+
+About the λ parameter:
+• λ = 0 gives TD(0) (what we called TD up until
+now).
+• low values of λ give more weight to short-term
+returns, but are smoother than a fixed n because they still average over all n.
+• high values of λ give more weight to long-term
+returns.
+• λ = 1 gives MC.
+Code: little-book-rl/algos/value_based/tabular.py
+We can see how the n of n−step TD and the λ of
+TD(λ) affect the variance of the targets in the 19-state
+random walk:
+
+73
+
+Figure 3.11: Target variance for state 10 for n-step
+TD (left) and TD(λ) (right), 19-state random walk.
+
+Intuitively, TD(λ) can be seen as a way to “hedge
+our bets” in the bias-variance trade-off, which choosing a single n doesn’t address. Averaging over all n
+avoids the need to rely on a single value. And indeed,
+TD(λ) is Pareto-superior to n-step TD on the 19-state
+random walk:
+
+Figure 3.12: TD(λ) (red) Pareto-dominates n-step TD
+(blue) in this bias-variance plane (α = 0.1, 19-state
+random-walk) (lower left is better).
+
+74
+
+This idea is extensively used in modern RL algorithms, notably in the Generalized Advantage Estimation (GAE, [Schulman, Moritz, et al. 2016]),
+which uses the same target as TD(λ):
+GAE(λ)
+
+At
+
+= Gλt − V (St ) =
+
+∞
+X
+
+(γλ)k δt+k ,
+
+k=0
+
+where δt = Rt+1 + γV (St+1 ) − V (St ) is the TD
+error.

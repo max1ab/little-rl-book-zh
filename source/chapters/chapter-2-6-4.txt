@@ -1,0 +1,315 @@
+Self-play
+
+Because Go is a two-player game, the agent needs an
+opponent to play against to collect experience. AlphaGo Zero uses self-play by playing against another
+version of itself. It also has the benefit that the agent
+always faces an opponent of its own level, providing
+some sort of curriculum learning.
+Note that this self-play does not degenerate into a
+suboptimal strategy:
+135
+
+• the targets are grounded rather than selfreferential: the regression is done toward a
+search-improved version of the policy and
+toward real game outcomes, rather than
+toward the network’s own predictions.
+• the two-player zero-sum perfect-information
+structure ensures any exploitable weakness on
+one side is punished by the symmetric opponent.
+but rather tends toward the unique minimax equilibrium of the game:
+
+Figure 6.3: Elo rating of AlphaGo Zero during training. [Silver et al. 2017]
+
+136
+
+6.5
+
+Discussion
+
+At test time, AlphaGo Zero acts like it would in training, in the sense that it doesn’t directly use its policy
+to pick actions but performs the MCTS-like improvement step described above to pick actions. This can
+be seen as a form of test-time compute.
+
+Figure 6.4: Using the base policy (“Raw Network”) is
+far less effective than using the search-improved policy (“AlphaGo Zero”), as it loses against its improved
+version more than 99.99% of the time. [Silver et al.
+2017]
+
+The AlphaGo Zero recipe, named AlphaZero, is thus
+very strong, but it relies on a specific setup: known
+or learnable dynamics, a tractable action space, and
+
+137
+
+cheap simulated rollouts.
+It transfers remarkably well when these conditions
+hold (AlphaTensor, AlphaDev, AlphaProof, Aristotle),
+but it is far from a plug-and-play recipe for arbitrary
+settings. For example, there has been a strong push
+to apply it to LLM training with yet no clear public
+success so far [S. Yao et al. 2023; Hao et al. 2023].
+
+138
+
+Conclusion
+Overview of the book
+After some definitions (Chapter 1), we organized the
+methods by what they try to learn (Chapter 2). In
+the value-based family (Chapter 3), we saw different
+ways of traversing the same Bellman backup diagram,
+parameterized by two questions: how deep and how
+wide. In the policy-based family (Chapter 4), we
+instead tried to estimate the policy gradient with low
+variance, and how to safely take more than one step
+per batch of experience.
+Finally, we looked at two popular instances of RL
+methods (Chapter 5, Chapter 6), and tried to link
+them to the concepts we built in the previous chapters.
+
+139
+
+Recurring patterns
+To end the book, it is worth mentioning a few patterns that surfaced more than once across chapters.
+Credit assignment. Every RL algorithm provides
+a way of attributing credit through time: bootstrapping in TD, returns in MC, the policy gradient theorem in policy optimization.
+Bias and variance. They appear in the choice between MC and TD, in the depth of n-step returns, in
+the λ of GAE, in the importance ratio of PPO, in the
+group baseline of GRPO. Every estimator in RL faces
+this trade-off.
+The data distribution moves. This is what fundamentally separates RL from supervised learning.
+The agent generates its own training data, and any
+update changes which data it will see next. Design
+choices like trust regions manage this drift.
+On-policy vs off-policy. How stale is the data
+relative to the current policy? Q-learning tolerates
+arbitrary staleness by decoupling the behavior policy
+from the target policy, while PPO and GRPO use trust
+regions. It implies practical limitations in modern RL
+infrastructures.
+
+140
+
+What this book does not cover
+Many active areas of RL were left out in this book,
+including:
+• Offline RL: learning a policy from a fixed
+dataset without further interaction (CQL, IQL,
+behavior cloning baselines).
+• Deterministic policy gradients: DDPG,
+TD3, SAC, and the off-policy actor-critic line
+of work behind modern robotics.
+• Model-based RL: Dreamer, MuZero, PlaNet,
+and learned world models for planning.
+• Exploration: multi-armed bandits, intrinsic
+motivation (RND, ICM), Thompson sampling,
+posterior sampling . . .
+• Multi-agent RL: general-sum games, equilibrium concepts, opponent modeling.
+• Inverse RL: recovering rewards from demonstrations.
+• Hierarchical RL: options, sub-goals, temporal abstraction.
+
+Going further
+There are many resources to dive deeper into RL.
+Among the citations of this book, you can notably
+141
+
+find:
+• Reinforcement Learning: An Introduction, Sutton and Barto [Sutton et al. 2018], which is the
+canonical reference for the classical theory.
+• Spinning Up in Deep RL, [Achiam 2018], which
+provides a curated introduction to deep RL
+with clean PyTorch implementations. This can
+be completed with the more recent CleanRL
+[Huang et al. 2022], as well as PufferLib
+[Suarez 2024], which uses highly optimized
+C-vectorized environments, enabling fast
+iteration on RL algorithms.
+You can also check:
+• RL lecture series [Silver 2015], [Levine 2023],
+and [Abbeel 2021].
+• Lilian Weng’s blog [Weng 2018], a really great
+resource covering RL topics (and more) with
+deep dives into each topic.
+• The RLHF Book, [Lambert 2024], a thorough
+reference on post-training of language models.
+
+142
+
+143
+
+Bibliography
+Abbeel, P. (2021). Foundations of Deep RL – 6-lecture
+series. YouTube lecture series. Accessed: 2026-0515.
+Achiam, J. (2018). “Spinning Up in Deep Reinforcement Learning”. In.
+Bellman, R. (1961). Adaptive Control Processes: A
+Guided Tour. Princeton, NJ: Princeton University
+Press.
+Carta, T., C. Romac, T. Wolf, S. Lamprier, O. Sigaud,
+and P.-Y. Oudeyer (2023). “Grounding Large Language Models in Interactive Environments with
+Online Reinforcement Learning”. In: Proceedings
+of the 40th International Conference on Machine
+Learning (ICML). Vol. 202. Proceedings of Machine
+Learning Research. PMLR, pp. 3676–3713. arXiv:
+2302.02662 [cs.LG].
+Chen, X., J. Xu, T. Liang, Z. He, J. Pang, D. Yu, L. Song,
+Q. Liu, M. Zhou, Z. Zhang, R. Wang, Z. Tu, H. Mi,
+
+145
+
+and D. Yu (2025). Do NOT Think That Much for
+2+3=? On the Overthinking of o1-Like LLMs. arXiv:
+2412.21187 [cs.CL].
+Chu, T., Y. Zhai, J. Yang, S. Tong, S. Xie, D. Schuurmans, Q. V. Le, S. Levine, and Y. Ma (2025). SFT
+Memorizes, RL Generalizes: A Comparative Study of
+Foundation Model Post-training. arXiv: 2501.17161
+[cs.LG].
+Cursor Research (2026). Composer 2 Technical Report.
+arXiv: 2603.24477 [cs.SE].
+DeepSeek-AI (2025). DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models. arXiv: 2512.
+02556 [cs.CL].
+Fleuret, F. (2023). The Little Book of Deep Learning.
+lulu.com.
+Grill, J.-B., F. Altché, Y. Tang, T. Hubert, M. Valko,
+I. Antonoglou, and R. Munos (2020). “Monte-Carlo
+Tree Search as Regularized Policy Optimization”.
+In: Proceedings of the 37th International Conference
+on Machine Learning (ICML). Vol. 119. Proceedings
+of Machine Learning Research. PMLR, pp. 3769–
+3778. arXiv: 2007.12509 [cs.LG].
+Hao, S., Y. Gu, H. Ma, J. J. Hong, Z. Wang, D. Z.
+Wang, and Z. Hu (2023). “Reasoning with Language Model is Planning with World Model”. In:
+Proceedings of EMNLP. eprint: 2305.14992.
+Huang, S., R. F. J. Dossa, C. Ye, J. Braga, D.
+Chakraborty, K. Mehta, and J. G. Araújo
+(2022). “CleanRL: High-quality Single-file Im146
+
+plementations of Deep Reinforcement Learning
+Algorithms”. In: Journal of Machine Learning
+Research 23.274, pp. 1–18.
+Lambert, N. (2024). Reinforcement Learning from Human Feedback. Online.
+Levine, S. (2023). CS285: Deep Reinforcement Learning. Course, University of California, Berkeley. Accessed: 2026-05-15.
+Liu, M., S. Diao, X. Lu, J. Hu, X. Dong, Y. Choi, J. Kautz,
+and Y. Dong (2025). ProRL: Prolonged Reinforcement
+Learning Expands Reasoning Boundaries in Large
+Language Models. arXiv: 2505.24864 [cs.CL].
+Lu, K. and Thinking Machines Lab (Oct. 2025). OnPolicy Distillation. doi: 10.64434/tml.20251026.
+url: https://thinkingmachines.ai/blog/onpolicy-distillation (visited on 05/10/2026).
+Mnih, V., K. Kavukcuoglu, D. Silver, A. A. Rusu, J.
+Veness, M. G. Bellemare, A. Graves, M. Riedmiller,
+A. K. Fidjeland, G. Ostrovski, S. Petersen, C. Beattie,
+A. Sadik, I. Antonoglou, H. King, D. Kumaran, D.
+Wierstra, S. Legg, and D. Hassabis (2015). “Humanlevel control through deep reinforcement learning”. In: Nature 518.7540, pp. 529–533. doi: 10 .
+1038/nature14236.
+Prime Intellect Team, M. Senghaas, F. Obeid,
+S. Jaghouar, W. Brown, J. M. Ong, D. Auras,
+M. Sirovatka, J. Straube, A. Baker, S. Müller, J.
+Mattern, M. Basra, A. Ismail, D. Scherm, C. Miller,
+A. Patel, S. Kirsten, M. Sieg, C. Reetz, K. Erdem,
+147
+
+V. Weisser, and J. Hagemann (2025). INTELLECT-3:
+Technical Report. Submitted 18 Dec 2025. arXiv:
+2512.16144 [cs.LG].
+Ross, S., G. J. Gordon, and J. A. Bagnell (2011). “A
+Reduction of Imitation Learning and Structured
+Prediction to No-Regret Online Learning”. In: Proceedings of the 14th International Conference on Artificial Intelligence and Statistics (AISTATS). Vol. 15.
+Proceedings of Machine Learning Research. PMLR,
+pp. 627–635. arXiv: 1011.0686 [cs.LG].
+Schulman, J., S. Levine, P. Moritz, M. I. Jordan, and P.
+Abbeel (2015). “Trust Region Policy Optimization”.
+In: Proceedings of the 32nd International Conference
+on Machine Learning (ICML). Vol. 37. Proceedings
+of Machine Learning Research. PMLR, pp. 1889–
+1897. arXiv: 1502.05477 [cs.LG].
+Schulman, J., P. Moritz, S. Levine, M. I. Jordan, and
+P. Abbeel (2016). “High-Dimensional Continuous
+Control Using Generalized Advantage Estimation”.
+In: 4th International Conference on Learning Representations (ICLR). arXiv: 1506.02438 [cs.LG].
+Schulman, J., F. Wolski, P. Dhariwal, A. Radford, and
+O. Klimov (2017). Proximal Policy Optimization Algorithms. arXiv: 1707.06347 [cs.LG].
+Shao, Z., P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H.
+Zhang, M. Zhang, Y. K. Li, Y. Wu, and D. Guo (2024).
+DeepSeekMath: Pushing the Limits of Mathematical
+Reasoning in Open Language Models. arXiv: 2402.
+03300 [cs.CL].
+148
+
+Shenfeld, I., J. Pari, and P. Agrawal (2025). RL’s Razor:
+Why Online Reinforcement Learning Forgets Less.
+arXiv: 2509.04259 [cs.LG].
+Silver, D. (2015). Reinforcement Learning. Lecture series, University College London
+(COMPM050/COMPGI13). Accessed: 2026-05-15.
+Silver, D., J. Schrittwieser, K. Simonyan, I.
+Antonoglou, A. Huang, A. Guez, T. Hubert,
+L. Baker, M. Lai, A. Bolton, Y. Chen, T. Lillicrap,
+F. Hui, L. Sifre, G. van den Driessche, T. Graepel,
+and D. Hassabis (2017). “Mastering the game of Go
+without human knowledge”. In: Nature 550.7676,
+pp. 354–359. doi: 10.1038/nature24270.
+Suarez, J. (2024). PufferLib: Fast and Sane Simplifying Reinforcement Learning for Complex Game Environments. https : / / github . com / PufferAI /
+PufferLib. GitHub repository.
+Sutton, R. S. and A. G. Barto (2018). Reinforcement
+Learning: An Introduction. 2nd ed. Cambridge, MA:
+MIT Press.
+Team Olmo, A. Ettinger, A. Bertsch, B. Kuehl, D. Graham, D. Heineman, D. Groeneveld, F. Brahman, F.
+Timbers, H. Ivison, J. Morrison, J. Poznanski, K. Lo,
+L. Soldaini, M. Jordan, M. Chen, M. Noukhovitch,
+N. Lambert, P. Walsh, P. Dasigi, R. Berry, S. Malik,
+S. Shah, S. Geng, S. Arora, S. Gupta, T. Anderson,
+T. Xiao, T. Murray, T. Romero, and V. Graf (2025).
+Olmo 3. Submitted 15 Dec 2025, revised 14 Apr
+2026. arXiv: 2512.13961 [cs.LG].
+149
+
+Wang, S., L. Yu, C. Gao, C. Zheng, S. Liu, R. Lu, K.
+Dang, X. Chen, J. Yang, Z. Zhang, Y. Liu, A. Yang,
+A. Zhao, Y. Yue, S. Song, B. Yu, G. Huang, and J. Lin
+(2025). Beyond the 80/20 Rule: High-Entropy Minority Tokens Drive Effective Reinforcement Learning
+for LLM Reasoning. arXiv: 2506.01939 [cs.CL].
+Weng, L. (2018). “A (Long) Peek into Reinforcement
+Learning”. In: lilianweng.github.io.
+Williams, R. J. (1992). “Simple statistical gradientfollowing algorithms for connectionist reinforcement learning”. In: Machine Learning 8.3–4. Papier
+fondateur introduisant l’algorithme REINFORCE
+et les méthodes de policy gradient, pp. 229–256.
+doi: 10.1007/BF00992696.
+Wu, Y., Y. Zhou, Z. Ziheng, Y. Peng, X. Ye, X. Hu, W.
+Zhu, L. Qi, M.-H. Yang, and X. Yang (2026). “On the
+Generalization of SFT: A Reinforcement Learning
+Perspective with Reward Rectification”. In: The
+Fourteenth International Conference on Learning
+Representations (ICLR). arXiv: 2508 . 05629
+[cs.LG].
+Yao, F., L. Liu, D. Zhang, C. Dong, J. Shang, and J. Gao
+(Aug. 2025). Your Efficient RL Framework Secretly
+Brings You Off-Policy RL Training.
+Yao, S., D. Yu, J. Zhao, I. Shafran, T. L. Griffiths, Y.
+Cao, and K. Narasimhan (2023). “Tree of Thoughts:
+Deliberate Problem Solving with Large Language
+Models”. In: Advances in Neural Information Processing Systems (NeurIPS). eprint: 2305.10601.
+150
+
+Yue, Y., Z. Chen, R. Lu, A. Zhao, Z. Wang, Y. Yue,
+S. Song, and G. Huang (2025). Does Reinforcement
+Learning Really Incentivize Reasoning Capacity in
+LLMs Beyond the Base Model? arXiv: 2504.13837
+[cs.LG].
+Zheng, C., K. Dang, B. Yu, M. Li, H. Jiang, J. Lin, Y.
+Liu, H. Lin, C. Wu, F. Hu, A. Yang, J. Zhou, and
+J. Lin (2025). Stabilizing Reinforcement Learning
+with LLMs: Formulation and Practices. arXiv: 2512.
+01374 [cs.LG].
+
+151
+
+cba
+This book is licensed under the
+Creative Commons
+Attribution-ShareAlike 4.0
+International License
+(CC BY-SA 4.0).
+
+The full license text is available at:
+creativecommons.org/licenses/by-sa/4.0
+
+© 2026 Alexandre Torres–Leguet
+
+153

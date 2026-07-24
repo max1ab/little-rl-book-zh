@@ -1,0 +1,84 @@
+Common combinations
+
+These objects each have a different nature and each
+tries to predict a different aspect of the environment.
+An RL algorithm may try to learn several of these
+
+27
+
+objects at the same time, and knowing which one
+it learns is one of the first reflexes to have when
+stumbling upon a new algorithm.
+Rather than enumerating all combinations, we focus
+on the patterns that appear most often in practice.
+Value-based, model-free methods
+These methods do not try to learn a model of the
+environment. Instead, they learn a value function,
+most often an action-value function Q(s, a), which
+estimates how good it is to take a given action a in
+a given state s. The policy is then derived implicitly
+and on the fly by choosing the action with the highest
+estimated value.
+Deep Q-Network (DQN)
+
+Policy-based, model-free methods
+These methods also avoid learning an explicit model
+of the environment, but unlike value-based methods,
+they learn the policy directly. The goal is to directly
+increase the probability of actions that led to higher
+rewards in the past.
+REINFORCE, Group Relative Policy Optimization (GRPO)
+
+28
+
+Actor-critic, model-free methods
+Actor-critic methods combine both ideas. They learn
+a policy, called the actor, and a value function, called
+the critic. The actor is responsible for choosing actions, while the critic evaluates how good states or
+actions are, and helps guide and stabilize the learning
+of the actor. This combination is extremely common
+in modern RL, because it often provides a good compromise between performance and stability.
+Trust Region Policy Optimization (TRPO),
+Proximal Policy Optimization (PPO)
+
+Model-based methods
+Model-based methods learn, or sometimes are given,
+a model of the environment. This model predicts how
+the environment evolves after an action is taken. The
+main advantage is that it allows planning: instead
+of acting immediately, the agent can use the model
+to imagine possible futures and choose actions more
+carefully.
+Probabilistic Ensembles with Trajectory Sampling (PETS), AlphaGo Zero
+
+29
+
+Hybrid methods
+Some algorithms combine several of the previous
+ideas at once. For example, an algorithm may learn
+a policy, a value function, and a model of the environment simultaneously.
+MuZero, Dreamer
+RL algorithms
+Model-free
+• Value-based: learn how good
+each situation is
+• Policy-based: learn which action
+to take
+• Actor-critic: learn both
+Model-based
+• Planning with a model: learn a
+model
+• Hybrid methods: learn a model
+along with a policy and/or value
+function
+The choice of which category to use for a given problem depends on multiple factors, such as:
+• the environment: is it natural / easy to model?
+If so, model-based methods can be effective. Is
+it easier to estimate values, or to directly learn
+
+30
+
+a policy?
+• the amount of data available: if data is limited,
+use an algorithm that is able to re-use past
+experience.

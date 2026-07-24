@@ -1,0 +1,147 @@
+An example
+
+Let us look at a complete reinforcement learning
+project: learning to land a Starship rocket. In this
+project, the goal is to control the final phase of descent and make the vehicle land upright on a landing
+pad. The environment was built in Unity and the
+training was done with the Unity ML-Agents toolkit,
+using PPO [Schulman, Wolski, et al. 2017] (which is a
+model-free, actor-critic RL algorithm). The agent receives observations describing the state of the rocket,
+such as its position, speed, and orientation, and must
+choose among 162 discrete actions combining engine
+on/off, engine gimballing, and RCS commands.
+
+31
+
+Figure 2.1: 3D rendering of the RL environment. The
+rocket is firing its engines to slow down and land on
+the pad.
+
+This is a natural RL problem because it’s easy to
+frame as a game. The state corresponds to the physical situation of the rocket at a given time: where it is,
+how fast it moves, and how it is oriented. It’s a vector
+containing 11 real-valued numbers. The actions are
+the control decisions available to the agent, such as
+firing the engines, changing their direction, or using
+side thrusters. The reward is meant to capture the
+objective of the task: a successful landing. In other
+words, we do not tell the agent how to land. We only
+define what counts as success, and let it discover a
+strategy through trial and error.
+
+32
+
+This problem also helps illustrate the four main challenges of RL we discussed above:
+• Credit assignment problem Trajectories in
+the environment typically span thousands of
+time steps, and the reward is only given at
+the end of the episode. A successful landing
+may depend on a sequence of thousands of
+actions, and it is not clear which ones were
+responsible for the success. The agent must
+discover which actions to reinforce based on
+the (very) long-term consequences they have
+on the final reward.
+• Optimization instability
+This is how the rewards look during training.
+
+Figure 2.2: Reward curve during training.
+
+Note that it is the only signal available during
+training for us to know if the agent is improving or not. This is very different from a smooth
+loss curve as seen in supervised learning.
+
+33
+
+• Reward function This has probably been the
+most difficult part of this project. Ideally, as
+said before, we would like to have a simple
+reward function that directly encodes the real
+goal of the task. That would imply giving a
+reward of +1 whenever the landing is successful, and 0 otherwise. However, this reward is
+extremely sparse: at the beginning of training,
+landing a rocket is almost impossible for a random policy (it starts 5000m in the air with a
+random orientation). Even given an enormous
+exploration budget, obtaining a single successful landing by chance is extremely unlikely,
+thus the agent never receives any learning signal.
+One solution to this problem would be to give
+a denser reward, for example by giving a small
+positive reward for getting closer to the landing pad, a small negative reward for having too
+high a velocity, etc. But this is very delicate as
+it is prone to reward hacking: the agent may
+learn to maximize the reward in a way that
+does not actually lead to successful landings.
+For example, it may learn to hover at a certain
+height above the landing pad, which gives a
+good reward for being close, but never actually
+land.
+Another solution is to use curriculum learning:
+34
+
+instead of starting from the full problem, we
+can start with an easier version of it, thereby
+making random exploration actually lead to
+some successful landings. For example, we can
+start by spawning the rocket much closer to the
+ground, or with a more favorable orientation.
+This way, the agent can experience success
+more easily, and then gradually learn to handle
+more difficult situations as training progresses.
+The sparse reward function was finally chosen in combination with curriculum learning.
+It turned out not to be enough at the beginning of training, so imitation learning was also
+used briefly by providing demonstrations of
+successful behavior so that the agent could experience reward at least a few times. Once
+it had discovered trajectories leading to success, standard RL took over and started improving the policy further. Note that the imitation
+phase accounted for less than 0.001% of the
+total training. All the real progress was made
+thanks to RL on more and more difficult trajectories, spawning the spaceship straight from
+500m at the beginning of the curriculum to
+5000m in the sky with random orientation at
+the hardest level. Note that this explains the
+non-monotonicity of the reward curve during
+training, as landings were made harder and
+
+35
+
+harder as training progressed.
+• Exploration-exploitation dilemma During
+training, the RL algorithm (PPO) ensures that
+the policy always has a bit of randomness,
+which allows for some exploration (i.e. try
+actions which are, according to the agent’s
+knowledge, suboptimal). This is particularly
+important in this case because of curriculum
+learning: because the setup is changing during training, the agent must keep exploring
+and not get stuck in a local optimum that only
+works for the current curriculum level.
+Learn more about this project at
+github.com/alxndrTL/Landing-Starships.
+
+36
+
+Practical Notes
+The companion repository for this book is available
+at:
+
+github.com/alxndrTL/little-book-rl
+It contains:
+• One-file Python/PyTorch implementations of every algorithm (each linked in the body of the
+book)
+• Supplementary material for proofs
+• Notebooks to reproduce all figures
+
+37
+
+Part II
+
+Diving deeper
+
+Chapter 3
+
+Value functions
+This chapter focuses on detailing the different ways
+we can compute value functions. We will find that all
+methods, however different they may seem, follow a
+common pattern.
+As we said in Chapter 2, such functions will be used
+downstream to derive a policy.

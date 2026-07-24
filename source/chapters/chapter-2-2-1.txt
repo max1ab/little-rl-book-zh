@@ -1,0 +1,17 @@
+Learning a policy
+
+One of the objects an RL algorithm may learn is the
+policy itself, often denoted by π. It directly tries to
+learn which action to take. We usually talk about
+policy-based methods or policy optimization.
+
+25
+
+Given the previous batch of experience, update the policy to make it choose actions that
+lead to higher rewards.
+If we are not directly learning a policy, we derive it
+from another object that we learn. This object usually conveys some kind of prediction about the future
+of the environment. Being in a given state, querying this object gives us some information about the
+different possible futures, allowing us to choose the
+best action. We derive the policy on the fly, without
+explicitly learning it.

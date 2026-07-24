@@ -1,0 +1,213 @@
+Policy gradient methods
+
+4.2.1 Policy gradient theorem (weak
+form) - SPG
+The policy gradient theorem aims at giving a way
+to express ∇θ J(θ) in a form that can be estimated
+from samples. Its “added value” is that doing so is not
+trivial, as θ parameterizes the sampling distribution
+85
+
+rather than the integrand, so differentiating under
+the integral does not directly yield an expectation.
+There exist two forms of this theorem. The weaker
+form states that:
+T
+−1
+h
+i
+X
+∇θ J(θ) = Eτ ∼πθ G(τ )
+∇θ log πθ (At | St ) .
+t=0
+
+We can in fact have a good intuition about this formula. For a trajectory τ that is sampled and from
+which we obtained the return G(τ ):
+• ∇θ log πθ (At | St ) is the direction in the space
+of parameters that makes action At more likely
+in state St .
+• we sum these directions over all timesteps of
+the trajectory, which gives the direction of parameters that makes τ more likely (i.e. if we
+were to take a step toward that direction, τ
+would now be more likely). So this is a R|θ|
+vector, where |θ| is the number of parameters.
+• the resulting vector is scaled by the trajectory
+return G(τ ), a single scalar. If the trajectory
+was good (G(τ ) large and positive), we step in
+the direction that makes all of its actions more
+likely. If it was bad, we step in the opposite
+direction.
+
+86
+
+This formula can be approximated by sampling:
+∇θ J(θ) ≈
+
+TX
+N
+i −1
+1 X
+(i)
+(i)
+∇θ log πθ (at | st ),
+G(τi )
+N i=1
+t=0
+
+where τ1 , . . . , τN are trajectories sampled by running πθ in the environment.
+This leads to the following algorithm, often referred
+to as Simple Policy Gradient (SPG, [Achiam 2018]):
+Algorithm – SPG
+1: Init policy parameters θ at random
+2: for iteration = 1, . . . , M do
+
+5:
+
+Collect a batch of N trajectories {τi }N
+i=1 with πθ
+for each trajectory τi do
+TP
+i −1
+(i)
+γ t rt+1
+Compute return G(τi ) =
+
+6:
+
+end for
+
+3:
+4:
+
+t=0
+
+7:
+
+ĝ ← N1
+
+N
+P
+
+G(τi )
+
+i=1
+
+TP
+i −1
+
+(i)
+
+(i)
+
+∇θ log πθ (at | st )
+
+t=0
+
+θ ← θ + αĝ
+9: end for
+8:
+
+Code: little-book-rl/algos/policy_based/spg.py
+A note on the “loss” in code.
+In a typical PyTorch implementation of SPG, you will
+see something like:
+loss = -(policy(obs).log_prob(act)*weight).mean()
+
+where obs and act are the states and actions of the
+sampled trajectories, weight is G(τ ) for SPG. The
+gradient will be computed by torch.autograd.
+87
+
+This quantity is called a “loss” by analogy with supervised learning, but it should not be considered a
+loss in the usual sense:
+• its numerical value carries no information
+about how well the policy performs. While
+grad(loss) will indeed point in the opposite
+direction of ∇θ J(θ), this does not imply that
+the value of loss is J(θ).
+• Even as a gradient signal, it is only valid at
+the parameters that were used to collect the data.
+The trajectories (obs, act) stored in the batch
+were sampled from the old policy, and the policy gradient theorem requires the expectation
+to be taken under that same policy. So for the
+very first gradient step on this batch, the estimate is correct. But if we were to take a second
+gradient step on the same batch, θ would have
+moved and grad(loss) would no longer estimate ∇θ J(θ). This makes policy gradient
+methods inherently on-policy, which is part of
+why they tend to be less data-efficient than the
+off-policy Q-learning methods of the previous
+chapter (no replay buffer possible).
+
+88
+
+4.2.2 Policy gradient theorem (rewardto-go form) - REINFORCE
+Under the weak form of the theorem, the same overall
+return G(τ ) is used to weight all the actions taken
+TP
+−1
+in the trajectory via G(τ )
+∇θ log πθ (At | St ).
+t=0
+
+But it doesn’t really make sense: for action At , the
+return G(τ ) contains rewards R1 , R2 , . . . , Rt that
+were collected before action At was taken. Those
+past rewards cannot have been caused by At . They
+have zero expectation and only add variance to the
+estimator.
+The reward-to-go form of the policy gradient theorem gives a “better” expression:
+∇θ J(θ) = Eτ ∼πθ
+
+−1
+h TX
+
+i
+Gt ∇θ log πθ (At | St ) ,
+
+t=0
+
+where Gt is the same Gt we used throughout Chapter 3, i.e. the cumulative discounted reward.
+Both formulations are valid (they yield the same expectation) as the past rewards do not contribute to
+the expectation, only to its variance. This makes the
+reward-to-go form less noisy.
+This refinement gives us REINFORCE [Williams
+1992], which is essentially SPG with G(τ ) replaced
+by Gt :
+
+89
+
+Algorithm – REINFORCE
+1: Init policy parameters θ at random
+2: for iteration = 1, . . . , M do
+3:
+4:
+5:
+
+Collect a batch of N trajectories {τi }N
+i=1 with πθ
+for trajectory τi do
+TP
+i −1
+(i)
+(i)
+Compute returns ∀t, Gt =
+γ k−t rk+1
+k=t
+
+end for
+N TP
+i −1
+1 P
+(i)
+(i)
+(i)
+7:
+ĝ =
+G ∇θ log πθ (at | st )
+N i=1 t=0 t
+8:
+θ ← θ + αĝ
+9: end for
+6:
+
+Code: little-book-rl/algos/policy_based/reinforce.py

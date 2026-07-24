@@ -1,0 +1,262 @@
+Neural networks
+
+So far in this chapter, we have assumed that states
+and actions are discrete and few enough to enumerate, making it possible to store Q in a table and update each (s, a) independently. This is problematic
+for two reasons:
+• Many real-world problems have continuous
+state spaces (physics-based control tasks involving positions or velocities) or huge discrete ones (LLMs where the possible states are
+all possible token sequences). We could never
+visit and learn every cell during training.
+• In the tabular case, each cell is learned in isolation, and the potential “closeness” between
+states is not exploited. However, we can expect
+the value function to be smooth across states,
+
+75
+
+i.e. we could generalize what we learn from
+one state to its neighbors.
+The fix is function approximation: replace the
+table with a parametric function Qθ (s, a) and learn
+θ. We typically use a neural network for Qθ , and this
+is why we start talking about Deep Reinforcement
+Learning.
+x
+Qθ (s, left)
+ẋ
+
+θ
+Qθ (s, right)
+θ̇
+
+Figure 3.13: The Q-network on CartPole, where the
+goal is to balance a pole placed on a moving cart by
+moving the cart left or right. The input is the state of
+the environment (position, velocity, angle, angular
+velocity) and the output is the value of each action
+in that state.
+In principle, any of the previous algorithms treated
+in the tabular case could be extended to the function
+approximation case. In practice, value-based deep RL
+is dominated by Q-learning-style methods because of
+their data efficiency that we talked about previously.
+That is why every Deep Q-learning implementation
+76
+
+you will encounter will have some kind of replay
+buffer D implemented, to store past transitions that
+are still valid to use for training the current policy.
+Recall the Q-learning update from Section 3.5:
+
+
+Q(St , At ) ← Q(St , At ) + α y − Q(St , At )
+with y = Rt+1 + γ max
+Q(St+1 , a′ ).
+′
+a
+
+This can be seen as a step toward the TD target y.
+With a parametric Qθ , the natural analog is to minimize the squared distance to that target by SGD:
+h
+2 i
+L(θ) = E(s,a,r,s′ )∼D y − Qθ (s, a)
+with y = r + γ max
+Qθ (s′ , a′ ).
+′
+a
+
+Two complications arise from this:
+• consecutive transitions in a trajectory are
+highly correlated, which violates the i.i.d.
+assumption of SGD. This is less problematic
+for off-policy methods as we can sample from
+any past transition.
+• The target y depends on θ which we are updating.
+These two complications make DQN different from
+standard supervised regression.
+Historically, Deep Q-learning [Mnih et al. 2015] is
+the first algorithm to address these issues at scale
+77
+
+and train a deep neural network to play Atari games
+at human level. The main innovation of DQN is the
+introduction of a target network, which is a separate
+copy Qθ− of the network that is used to compute
+targets:
+Qθ− (s′ , a′ ).
+y = r + γ max
+′
+a
+
+The target parameters θ− are held fixed and only
+synced to θ every few thousand steps.
+Remark
+
+The architecture in the original paper is a small convolutional network reading a stack of four frames
+and the output layer has one head per action.
+One practical limitation of DQN is that it only works
+with discrete action spaces, because the network has
+to produce one output per action and a max has to
+be applied on top.
+The full algorithm:
+
+78
+
+Algorithm – Deep Q-learning (DQN)
+1: Initialize replay buffer D
+2: Initialize θ at random; set θ − ← θ
+3: for episode = 1, . . . , M do
+4:
+5:
+6:
+7:
+8:
+9:
+10:
+11:
+
+Observe initial state s
+repeat
+a ← ϵ-greedy(Qθ (s, ·));
+Execute a, observe r, s′
+Store (s, a, r, s′ ) in D
+Sample minibatch B from D
+for (sj , aj , rj , s′j ) ∈ B do
+yj ← rj + γ max
+Qθ− (s′j , a′ )
+′
+a
+
+12:
+13:
+
+end for
+2
+P
+1
+gradient step on loss |B|
+yj − Qθ (sj , aj )
+j
+
+s ← s′
+15:
+θ− ← θ every C steps
+16:
+until s is terminal
+17: end for
+14:
+
+Code: little-book-rl/algos/value_based/dqn.py
+Example: Atari Breakout
+The CleanRL [Huang et al. 2022] project provides a
+single-file, sub-300-line implementation of DQN that
+you can run on Atari games, in a very similar setup
+as in the original paper: github.com/vwxyzjn/cleanrl.
+A core difficulty of RL training lies in the lack of reliable signal with which we can monitor the training.
+The reward curve is interesting to watch, but it is
+a poor analogue of the supervised loss: it is noisy
+79
+
+due to both environment stochasticity and ε-greedy
+exploration, and it is only indirectly related to what
+we actually optimize in this case, the TD error.
+
+Figure 3.14: Return per episode during training. A
+few dozen minutes on a consumer laptop. Human
+level is around 30.
+
+The TD loss, i.e. the regression loss of the Q-network,
+is not a good signal to track either. The regression
+target is a moving quantity which (we hope) changes
+over training as the policy improves and visits new
+states. The TD loss is therefore not the value of
+any fixed objective, and tracking it across training
+steps does not really make sense. It may increase
+while training is healthy (a better policy is found
+and explores new regions of the state space), and it
+
+80
+
+may decrease while training is stuck on a degenerate
+policy.
+
+Figure 3.15: TD loss during training.
+
+As opposed to supervised learning (e.g. language
+modeling), where the loss of a 1-trillion-parameter
+model can look as smooth as:
+
+81
+
+Figure 3.16: Kimi K2 training loss (1T total/32B active). It includes several improvements like MoE,
+Muon and synthetic data yet is still very stable.
+
+82
+
+Chapter 4
+
+Policy
+optimization
+methods
+In Chapter 3, we focused on learning value functions
+V or Q, and recovered a policy implicitly by acting
+greedily with respect to Q. The policy itself was
+never the object of optimization: we tried to make
+Qθ satisfy a Bellman equation, and the policy was
+derived as arg max Qθ (s, a).
+a
+
+In this chapter we take a different route: we parameterize the policy and directly learn its parameters.
+This is the domain of policy optimization methods.
+
+83
+
+4.1
+
+Setup
+
+We parametrize the policy as πθ (a | s), typically a
+neural network mapping a state to a distribution over
+actions.
+πθ (a1 | s)
+
+πθ (a2 | s)
+
+s
+
+πθ (a3 | s)
+
+Figure 4.1: Policy network for a discrete action space
+with |A| = 3. For a given state, the network outputs
+a distribution over actions.
+
+We see right away how this can handle continuous
+action spaces, by outputting the parameters of a continuous distribution (e.g. mean and variance of a
+Gaussian).
+We frame the problem of learning a policy that maximizes the expected return as the optimization of:
+
+
+J(θ) = Eτ ∼πθ G(τ )
+where τ = (S0 , A0 , R1 , S1 , A1 , R2 , . . . , ST ) is a trajectory sampled by following πθ in the environment,
+84
+
+and G(τ ) =
+
+TP
+−1
+
+γ t Rt+1 is its discounted return.
+
+t=0
+
+The optimization problem is then
+θ∗ = arg max J(θ)
+θ
+
+While in Chapter 3, the loss we minimized was only
+a proxy objective, here J(θ) is the quantity we care
+about (expected return) and we differentiate it directly.
+Two families of algorithms tackle this problem differently:
+• policy gradient methods compute ∇θ J(θ)
+via the policy gradient theorem and apply gradient ascent. (REINFORCE)
+• trust region methods build a surrogate objective that locally approximates J and optimize
+it within a trust region. (PPO)

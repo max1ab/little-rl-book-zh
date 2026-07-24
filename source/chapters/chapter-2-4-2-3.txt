@@ -1,0 +1,283 @@
+Baseline subtraction - VPG
+
+While REINFORCE gives an estimate that has less
+variance than SPG, it is still noisy. A common variance reduction technique is to subtract a baseline
+b(St ) from the return Gt :
+∇θ J(θ) = Eτ ∼πθ
+
+−1
+h TX
+
+i
+
+Gt −b(St ) ∇θ log πθ (At | St )
+
+t=0
+
+As long as b(St ) does not depend on At , this leaves
+the expectation unchanged, making the gradient estimator unbiased for any choice of b(St ). But the
+variance depends on b, and a well-chosen baseline
+can make the estimator less noisy.
+Indeed, consider X = ±1 with probability 1/2 each,
+and let Y = 100 ± 1. We want to estimate µ =
+90
+
+E[XY ]. The true value is
+E[XY ] = E[X]E[Y ] = 0.
+The naive estimator µ
+b = XY takes values ±99 or
+±101 and thus has variance:
+
+1
+992 + 1012 + 992 + 1012 = 10,001.
+4
+If we instead consider the modified estimator µ
+bb =
+X(Y − b) with b = 100, it still has expectation zero,
+but now µ
+bb = X(Y − 100) = ±1, so its variance is
+just
+
+1
+1 + 1 + 1 + 1 = 1.
+4
+and indeed, in practice, optimizing the two estimators gives very different profiles:
+
+Figure 4.2: Convergence of the two estimators: µ
+b=
+XY (blue) and µ
+bb = X(Y − 100) (orange).
+The variable Y has a large mean (100) and a small
+fluctuation (±1). Multiplying Y by a centered vari91
+
+able X amplifies the large mean into a ±100 swing
+in the estimator, even though that mean carries no
+information about the quantity of interest (it gets
+killed in expectation by E[X] = 0). Subtracting the
+mean of Y before multiplying removes the parasitic
+swing and keeps only the useful signal. A similar
+argument can be transposed to the policy gradient
+case, with X playing the role of ∇θ log πθ (At | St )
+(centered) and Y the role of Gt (large mean, smaller
+action-dependent fluctuation).
+A natural choice is b(St ) = V πθ (St ), the value function of the current policy: it represents the mean
+return from St under πθ . This gives:
+∇θ J(θ) = Eτ ∼πθ
+
+−1
+h TX
+
+i
+
+Gt −V πθ (St ) ∇θ log πθ (At | St ) .
+
+t=0
+
+i.e. we increase the probability of an action proportionally to how much better than expected it turned
+out to be. We often introduce the advantage to designate this quantity:
+At = Gt − V πθ (St ),
+which measures how much better than average the
+action At turned out to be.
+Thanks to Chapter 3, we know how to estimate V πθ .
+We therefore introduce a second neural network Vϕ
+trained alongside πθ to estimate the value function
+of the current policy. The policy network is often
+92
+
+called the actor, while the value network is called
+the critic and the resulting family of algorithms is
+known as actor-critic.
+We thus derive the Vanilla Policy Gradient (VPG)
+algorithm:
+Algorithm – VPG
+1: Init policy parameters θ and critic parameters ϕ
+2: for iteration = 1, . . . , M do
+3:
+4:
+5:
+
+Collect a batch of N trajectories {τi }N
+i=1 with πθ
+for each trajectory τi do
+TP
+i −1
+(i)
+(i)
+γ k−t rk+1
+Compute ∀t Gt =
+k=t
+(i)
+
+(i)
+
+(i)
+
+Compute ∀t At = Gt − Vϕ (st )
+7:
+end for
+8:
+Policy update:
+1 P P (i)
+(i)
+(i)
+9:
+θ ←θ+α
+A ∇θ log πθ (at | st )
+N i t t
+10:
+Critic update:
+1 P P 1 (i)
+(i) 2
+G − Vϕ (st )
+11:
+ϕ ← ϕ − β ∇ϕ
+N i t 2 t
+12: end for
+6:
+
+Code: little-book-rl/algos/policy_based/vpg.py
+
+4.2.4 Generalized Advantage Estimation
+So far, we estimated the advantage as At = Gt −
+V (St ). This is unbiased (assuming V is correct) but
+inherits the high variance of Gt , which is itself a
+
+93
+
+single Monte Carlo sample of a long sum of stochastic
+rewards.
+We can trade some of that variance for bias by using bootstrapped estimates of the return, exactly as
+we did in the transition from MC to TD methods in
+Chapter 3. The 1-step TD estimate of the advantage
+is
+(1)
+
+At
+
+= Rt+1 + γV (St+1 ) − V (St ) =: δt ,
+
+which is just the TD error. The k-step estimate is
+(k)
+
+At
+
+=
+
+k−1
+X
+
+γ l Rt+l+1 + γ k V (St+k ) − V (St ),
+
+l=0
+
+and as k grows up to T − t, we recover the Monte
+Carlo advantage Gt − V (St ). Small k gives low variance and high bias (we trust V a lot) while large k
+gives high variance and low bias (we trust the actual
+rewards a lot).
+As we saw in Section 3.7 with TD(λ), rather than
+picking one k, the Generalized Advantage Estimator [Schulman, Moritz, et al. 2016] takes an exponentially weighted average of all k-step estimates:
+
+
+(1)
+(2)
+(3)
+AGAE
+= (1 − λ) At + λAt + λ2 At + · · ·
+t
+=
+
+∞
+X
+
+(γλ)l δt+l
+
+l=0
+
+with δt = Rt+1 +γV (St+1 )−V (St ). Both γ ∈ [0, 1]
+and λ ∈ [0, 1] control the bias-variance tradeoff:
+94
+
+• we can see γ as a way to reduce variance by
+down-weighting all future rewards. γ < 1
+introduces bias.
+• whereas λ < 1 introduces bias only when V
+is poorly estimated.
+In practice, λ is usually set somewhere around 0.95,
+and GAE has become the default advantage estimator in modern policy gradient implementations. It
+is computed efficiently by a single backward pass
+through the trajectory using the recursion
+AGAE
+= δt + γλ AGAE
+t
+t+1 ,
+with AGAE
+= 0 at the end of an episode.
+T
+This yields the following actor update:
+θ ←θ+α
+
+1 X X GAE(i)
+(i)
+(i)
+∇θ log πθ (at | st )
+A
+N i t t
+
+where the only change from VPG is the advantage
+estimator. For the critic, it is common to also switch
+to a λ-return target to reduce variance. Because of
+the relation AGAE
+= Gλt − Vϕ (St ), the λ-return is
+t
+available essentially for free and we can have the
+following critic update:
+ϕ ← ϕ−β ∇ϕ
+
+1 XX 1
+GAE(i)
+(i)
+(i) 2
+sg(At
++Vϕ (st ))−Vϕ (st )
+N i t 2
+
+where sg denotes the stop-gradient operator: the expression inside is computed with the current parameters but treated as a constant during differentiation.
+95
+
+4.2.5
+
+SPG vs. REINFORCE vs. VPG
+
+On CartPole, we compare the three algorithms:
+
+Figure 4.3: CartPole-v1: episodic return of SPG vs.
+REINFORCE vs. VPG through training.
+
+As expected, SPG < REINFORCE < VPG in performance, and SPG > REINFORCE > VPG in relative
+inter-run variance.
+Similarly to the previous XY example, we can plot
+the estimation of one of the components of the policy
+gradient. Subtracting the baseline indeed makes the
+gradient estimation smoother and leads to a graph
+very similar to the XY example:
+
+96
+
+Figure 4.4: Convergence of two estimators of one
+component of the policy gradient at a fixed state. Red
+is no baseline (REINFORCE), blue is with baseline
+(VPG).
+
+We can also directly evaluate the variance of the
+gradient estimates by stopping at a given iteration
+and sampling a large number of trajectories under
+the 4 different methods:
+
+97
+
+Figure 4.5: Distribution of gradient gi for 2000 trajectories. We see a decreasing variance as we progress
+from SPG to VPG with GAE. Note the mean of each
+estimate: it is approximately the same for the first 3
+methods because they are unbiased, but it is different
+for VPG with GAE because of the bias introduced by
+λ < 1.

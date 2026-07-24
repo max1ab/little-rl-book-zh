@@ -1,0 +1,361 @@
+Performance difference lemma
+
+The starting point is an exact identity relating the
+returns of two policies. For any policies πθ and πθold :
+J(θ) − J(θold ) =
+
+
+
+1
+Es∼dπθ , a∼πθ Aπθold (s, a)
+1−γ
+
+where dπ (s) is the normalized state visitation
+distribution induced by π [Schulman, Levine, et al.
+2015]. This formula states that the difference in
+performance between πθ and πθold is obtained by
+evaluating the new policy under the old critic. Thus,
+to make πθ better than πθold , we want πθ to put mass
+on actions with positive advantage under πθold .
+99
+
+Trust region
+
+ba
+tc
+h
+
+3
+
+Policy gradient
+
+1 batch,
+K steps
+
+θ3
+
+θK
+
+2
+ch
+
+t
+ba
+
+b
+
+h1
+atc
+
+θ2
+θ0 = θold
+
+θ1
+
+θ0
+trust region
+
+Figure 4.6: Two ways of using rollout data, in parameter space. Policy gradient methods (left) take a single
+step per batch of trajectories and must re-collect with
+the new policy to continue. Trust region methods
+(right) take K steps on a single batch, staying within
+the region where the surrogate Lθold remains trustworthy.
+
+This identity is exact but not what we want yet: the
+expectation is over the visitation distribution of the
+new policy, which we cannot sample from without
+rolling out πθ in the environment, and the whole
+point is to choose θ before a new rollout. Hence, we
+will build a surrogate objective Lθold (θ) ≈ J(θ) −
+J(θold ).
+
+100
+
+First step: state distribution approximation. We
+simply swap dπθ for dπθold :
+Lθold (θ) :=
+
+
+
+1
+Es∼dπθold , a∼πθ Aπθold (s, a) .
+1−γ
+
+The approximation error of this surrogate grows with
+how much πθ visits different states than πθold . This
+approximation thus dictates the existence of a trust
+region around πθold .
+Second step: importance sampling. The expectation still requires sampling actions from πθ . We
+rewrite it using importance sampling against πθold :
+
+
+1
+πθ (a | s) πθ
+Lθold (θ) =
+E πθold
+A old (s, a) .
+1 − γ s∼d
+a∼πθold πθold (a | s)
+
+Reminder: importance sampling. To estimate
+an expectation under a distribution p when we can
+only sample from another distribution q, we use the
+identity
+
+
+
+
+p(x)
+Ex∼p f (x) = Ex∼q
+f (x) ,
+q(x)
+valid as long as q(x) > 0 wherever p(x) > 0. The
+ratio p(x)/q(x) corrects the bias introduced by sampling from q rather than from p.
+Now everything is estimable from a batch of trajectories collected by πθold .
+101
+
+We can trust Lθold (θ) only when πθ is close to πθold .
+Indeed, if we naively maximize Lθold (θ) to convergence, we will likely land on a θ for which the swap
+dπθ → dπθold is inaccurate, and for which the actual
+return J(θ) may even drop.
+This gives the constrained problem:
+max Lθold (θ)
+θ
+
+s.t.
+
+πθ is close to πθold .
+
+i.e.
+"
+max Es∼dπθold
+θ
+
+a∼πθ
+
+πθ (a|s) πθ
+A old (s, a)
+πθold (a|s)
+
+#
+s.t.
+
+πθ ≈ πθold
+
+old
+
+Different ways to enforce the closeness give different
+algorithms. TRPO [Schulman, Levine, et al. 2015]
+uses an explicit KL constraint
+
+
+Es∼dπθold DKL (πθold ∥ πθ ) ≤ δ,
+solved with a conjugate-gradient step on a quadratic
+approximation of the KL. It works but is heavy to
+implement and to scale. PPO [Schulman, Wolski, et
+al. 2017] replaces this constraint with a much simpler
+proxy.
+
+102
+
+4.3.2
+
+PPO
+
+PPO modifies the previous objective as follows:
+LCLIP (θ) = Eπθ
+
+h
+old
+
+
+ i
+min ρt (θ) Ât , clip ρt (θ), 1 − ϵ, 1 + ϵ Ât
+
+πθ (At | St )
+is the importance raπθold (At | St )
+tio, Ât is an advantage estimator (typically GAE, see
+Section 4.2.4), and ϵ is a small constant (commonly
+0.1 or 0.2) called the clip parameter.
+where ρt (θ) =
+
+The intuition is to limit how far each action can be
+pushed in the direction of the objective:
+• If Ât > 0, we want to increase πθ (At | St ),
+so ρt tends to grow. The clip caps the gain at
+ρt = 1 + ϵ: past that, the gradient is zero.
+• If Ât < 0, we want to decrease πθ (At | St ),
+so ρt tends to shrink. The clip caps the loss at
+ρt = 1 − ϵ.
+• In both cases, when ρt drifts outside the trust
+region against the sign of Ât (e.g. ρt < 1 − ϵ
+with Ât > 0), the min selects the unclipped
+term so the gradient remains non-zero and
+pulls the policy back.
+PPO thus implements a soft trust region: the policy
+is softly prevented from moving too far on any single
+sample.
+PPO performs several gradient steps (typically
+around 5 epochs) on the same batch, re-using
+103
+
+the same data each time. As updates accumulate,
+ratios start hitting the clip and the gradient on
+those samples gets zeroed, which slows down the
+drift between θ and θold . The rest of the algorithm
+structure is the same as VPG with GAE:
+Algorithm – PPO
+1: Init policy parameters θ and critic parameters ϕ
+2: for iteration = 1, . . . , M do
+3:
+4:
+5:
+6:
+7:
+8:
+9:
+
+Collect a batch of N trajectories {τi }N
+i=1 with πθ
+for each trajectory τi do
+(i)
+Compute ∀t Ât via GAE using Vϕ
+end for
+(i)
+(i)
+Set θold ← θ and cache log πθold (at | st )
+for epoch = 1, . . . , K do
+for each minibatch B of size B do
+(i)
+
+
+
+(i)
+(i)
+(i)
+(i)
+← exp log πθ (at | st ) − log πθold (at | st )
+
+10:
+
+ρt
+
+11:
+
+Policy update:
+
+12:
+
+1
+θ ← θ + α ∇θ |B|
+
+
+
+(i) (i)
+(i)
+(i)
+min ρt Ât , clip(ρt , 1 − ϵ, 1 + ϵ) Ât
+
+P
+(i,t)∈B
+
+13:
+
+Critic update:
+
+14:
+
+1
+ϕ ← ϕ − β ∇ϕ |B|
+
+P
+(i,t)∈B
+
+1
+2
+
+ 
+
+2
+(i)
+(i)
+(i)
+sg Ât + Vϕ (st ) − Vϕ (st )
+
+end for
+end for
+17: end for
+15:
+16:
+
+Code: little-book-rl/algos/policy_based/ppo.py
+
+104
+
+Remark
+
+It is worth observing that the very first gradient step
+of PPO (for which ρt = 1 everywhere) recovers
+the policy gradient with advantages of VPG from
+§4.2.3, even though the derivation went through the
+performance difference lemma rather than the policy
+gradient theorem.
+Also, while we can re-use the same batch of data
+collected by a previous policy to update the current
+one, we still mostly refer to PPO as an on-policy
+method, since the surrogate objective is only valid
+for policies that are close enough to the one that
+produced the data.
+Finally, the attentive reader may have noticed that
+the number of gradient steps performed per PPO
+iteration is not K but K × num_minibatches: at each
+epoch, the collected batch is shuffled and split into
+minibatches, and one gradient step is taken on each.
+This allows for even more updates per batch, with
+the clipping ratio making it possible.
+
+105
+
+Remark
+
+There are many implementation details specific to a
+given PPO codebase (or any deep RL algorithm) that
+we have intentionally omitted. A few worth noting:
+• Defining a collection period. Should we collect
+N full episodes or T timesteps before each update? Fixing the number of episodes is closer
+to the textbook definition, but the wall-clock
+cost per update fluctuates as episode lengths
+shift with the policy. Fixing T timesteps is
+more common as it gives a constant compute
+budget per iteration and works more naturally
+with vectorized environments, at the price of
+having to bootstrap V (sT ) on the last (truncated) step.
+• Termination vs. truncation. A terminal state
+has V (sT ) = 0, whereas a time-limit cutoff
+requires bootstrapping with the critic’s estimate. Some implementations treat truncations
+as terminations.
+The PPO implementation in the supplementary material of the book lists the differences between the
+pseudocode shown here and the PPO of CleanRL.
+Also, see Huang et al. (2022), The 37 Implementation
+Details of PPO, for a thorough catalogue.
+Example: Atari Breakout
+Similarly to DQN, we apply PPO to the Atari Break-
+
+106
+
+out environment. It yields:
+
+Figure 4.7: Rewards obtained by PPO on the Atari
+Breakout environment.
+
+Monitoring the policy loss gives little insight:
+
+Figure 4.8: Policy loss during training.
+
+but the entropy of the policy is more interesting as
+107
+
+it shows how deterministic the policy becomes (and
+thus if it is still evolving or not):
+
+Figure 4.9: Entropy of the policy during training.

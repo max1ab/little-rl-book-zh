@@ -1,0 +1,97 @@
+Improvement
+
+The improvement step of AlphaGo Zero is done each
+time the agent has to pick an action, rather than
+globally at the end of an episode like in traditional
+policy iteration.
+Considering state s0 that the agent has to act on, the
+goal is to find an action a according to an improved
+
+132
+
+version of the current policy πθ .
+This is done by traversing the Bellman backup diagram starting from s0 . Instead of traversing it exhaustively, AlphaGo Zero grows a partial tree, concentrating computation on the regions of the tree
+that look promising under the current πθ and Vϕ :
+s0
+
+s0
+
+Vϕ
+
+Iteration k
+
+s0
+
+Vϕ
+
+Iteration k + 1
+
+Many iterations later
+
+Figure 6.1: A single improvement step grows a partial tree through repeated traversals from s0 . Each
+traversal (red) follows a selection rule trading off
+exploration and exploitation. It expands the tree
+by one node and backs up the statistics of the path
+it followed, starting from the bootstrap Vϕ (leaf).
+The most promising lines of play are thus the most
+densely explored. This is a modified version of an
+MCTS rollout.
+
+After a fixed budget of traversals, the visit counts at
+
+133
+
+the root concentrate on the most promising actions
+and define an improved policy at s0 , from which the
+agent samples its action.
+We can think about this improvement step as approximating the optimality Bellman operator [Grill et al.
+2020]:
+
+
+Vϕ (s0 ) ← max E r(s0 , a, s′ ) + γVϕ (s′ ) ,
+a
+
+using the tree, and using the policy as a prior to focus
+the search and make it tractable.
+We can also, more intuitively, think about the base
+policy πθ as a kind of intuition policy, and the search
+as a “thinking” process that mentally unrolls and
+simulates the possible futures.
+s0
+
+µ = improve(π | s0 )
+
+z = +1
+
+Figure 6.2: Each action of the result is the output of
+an inner search rooted at st . From one improvement
+step to the next, the tree can be partially reused.
+
+134
+
+6.3
+
+Evaluation
+
+Once experience has been collected by acting according to the improved policy and rewards z collected,
+the evaluation phase takes place.
+The value function is fit to evaluate the improved
+policy, using MC evaluation:
+X
+2
+LV (ϕ) =
+Vϕ (s) − z .
+s
+
+and the base policy is trained using behavior cloning
+/ SFT to reproduce the improved policy:
+XX
+µ(a|s) log πθ (a|s),
+Lπ (θ) = −
+s
+
+a
+
+The base policy π can be seen as the fast, intuitive
+System 1, and the search-improved policy µ as the
+slow, deliberate System 2. The evaluation phase distills System 2 back into System 1.

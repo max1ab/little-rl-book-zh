@@ -1,0 +1,10 @@
+Learning values
+
+The other form this object can take is a value function,
+often denoted by V or Q. The goal of such a function
+is to estimate how good a state is, or how good it
+is to take a given action in a given state, based on
+the rewards that are expected to be received in the
+future.
+Given the previous batch of experience, update the value function to better estimate the
+value of the states and actions.

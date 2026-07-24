@@ -1,0 +1,97 @@
+From PPO to GRPO
+
+The action space being large and the rewards sparse
+with long horizons, methods like DQN are typically
+not a good fit, hence policy optimization methods
+are used, and in particular trust region methods.
+Applying PPO to the previous setup gives:
+
+J
+
+PPO
+
+(θ) = E x∼D
+
+y∼πθold
+
+" |y|
+X
+t=1
+
+
+
+min ρt (θ) Ât , clip(ρt (θ), 1−ϵ, 1+ϵ) Ât
+
+
+
+#
+
+<t )
+where ρt (θ) = ππθθ (y(yt |x,y
+is the per-token import |x,y<t )
+old
+
+tance ratio and Ât is the GAE advantage computed
+from a learned value function Vϕ typically as large
+as the policy. Such critic is expensive in memory and
+also hard to train since the reward is sparse and only
+available at the end of quite long trajectories.
+GRPO (Group Relative Policy Optimization [Shao
+et al. 2024; DeepSeek-AI 2025]) drops the critic and
+replaces it by running the same prompt multiple
+times to get a group of outputs {y1 , . . . , yG }. This
+group led to rewards R = {R1 , . . . , RG }. Then, the
+117
+
+advantage of each response is computed as Âi,t =
+Ri − mean(R).
+Plugging this advantage into the PPO clipped surrogate and averaging over the group, and adding a
+per-token KL penalty against πref gives the GRPO
+objective:
+"
+J
+
+GRPO
+
+(θ) = E
+
+x∼D
+{yi }G
+i=1 ∼πθold (·|x)
+
+G
+
+|yi |
+
+1 XX
+G i=1 t=1
+#
+
+
+
+min ρi,t (θ) Âi , clip(ρi,t (θ), 1−ϵ, 1+ϵ) Âi
+
+π (y
+
+|x,y
+
+
+
+
+− β DKL (πθ ∥πref )
+
+)
+
+with ρi,t (θ) = πθθ (yi,ti,t |x,yi,<t
+. So GRPO is no
+i,<t )
+old
+longer an actor-critic method but still is a trust
+region method.
+
+While GRPO was developed in the context of RL for
+LLMs, it is a general RL algorithm that can be applied
+to any environment with the requirements that (1)
+only terminal rewards are available and (2) we are
+able to start multiple rollouts from the same starting
+state.
