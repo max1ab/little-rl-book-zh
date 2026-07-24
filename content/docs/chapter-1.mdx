@@ -88,8 +88,8 @@ $$
 
 <figure className="not-prose my-8">
   <div className="grid gap-3 sm:grid-cols-2">
-    <img src="/images/chapter-1/figure-1-3-loss-landscape.png" alt="监督学习中的损失景观" />
-    <img src="/images/chapter-1/figure-1-3-rl-mountain.png" alt="强化学习优化如同在陡峭山脊上攀登" />
+    <img src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/images/chapter-1/figure-1-3-loss-landscape.png`} alt="监督学习中的损失景观" />
+    <img src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/images/chapter-1/figure-1-3-rl-mountain.png`} alt="强化学习优化如同在陡峭山脊上攀登" />
   </div>
   <figcaption className="mt-3 text-center text-sm text-fd-muted-foreground">
     图 1.3：相比强化学习（右），监督学习中的损失景观（左）更容易导航。

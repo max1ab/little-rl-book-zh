@@ -10,6 +10,6 @@ export function baseOptions(): BaseLayoutProps {
       { text: "术语表", url: "/book/glossary" },
       { text: "关于译本", url: "/book/about" },
     ],
-    githubUrl: "https://github.com/alxndrTL/little-book-rl",
+    githubUrl: "https://github.com/max1ab/little-rl-book-zh",
   };
 }
