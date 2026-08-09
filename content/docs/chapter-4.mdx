@@ -46,27 +46,27 @@ $$
 
 ### 4.2.1 策略梯度定理（弱形式）— SPG
 
-策略梯度定理的目标，是给出一种能够从样本中估计 $\\nabla_\\theta J(\\theta)$ 的表达式。它的“附加价值”在于：这件事并不平凡，因为 $\\theta$ 参数化的是**采样分布**（sampling distribution），而不是被积函数，所以在积分号下求导并不能直接得到一个期望。
+策略梯度定理的目标，是给出一种能够从样本中估计 $\nabla_\theta J(\theta)$ 的表达式。它的“附加价值”在于：这件事并不平凡，因为 $\theta$ 参数化的是**采样分布**（sampling distribution），而不是被积函数，所以在积分号下求导并不能直接得到一个期望。
 
 这个定理有两种形式。较弱的形式表述如下：
 
 $$
-\\nabla_\\theta J(\\theta) = \\mathbb{E}_{\\tau \\sim \\pi_\\theta} \\left[ G(\\tau) \\sum_{t=0}^{T-1} \\nabla_\\theta \\log \\pi_\\theta (A_t | S_t) \\right].
+\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ G(\tau) \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta (A_t | S_t) \right].
 $$
 
-事实上，我们对这个公式可以有很好的直觉。对于一条被采样出来、并从中得到回报 $G(\\tau)$ 的轨迹 $\\tau$：
+事实上，我们对这个公式可以有很好的直觉。对于一条被采样出来、并从中得到回报 $G(\tau)$ 的轨迹 $\tau$：
 
-- $\\nabla_\\theta \\log \\pi_\\theta (A_t | S_t)$ 是参数空间中使动作 $A_t$ 在状态 $S_t$ 下更可能被选中的方向。
-- 我们把这些方向沿轨迹的所有时间步求和，得到的便是使 $\\tau$ 更可能出现的参数方向（也就是说，如果我们朝那个方向迈出一步，$\\tau$ 现在就会更可能发生）。因此这是一个 $\\mathbb{R}^{|\\theta|}$ 向量，其中 $|\\theta|$ 是参数的个数。
-- 最终得到的向量会被轨迹回报 $G(\\tau)$——一个标量——缩放。如果这条轨迹很好（$G(\\tau)$ 很大且为正），我们就朝着让它的所有动作都更可能被选中的方向迈步；如果它很糟，就朝相反方向迈步。
+- $\nabla_\theta \log \pi_\theta (A_t | S_t)$ 是参数空间中使动作 $A_t$ 在状态 $S_t$ 下更可能被选中的方向。
+- 我们把这些方向沿轨迹的所有时间步求和，得到的便是使 $\tau$ 更可能出现的参数方向（也就是说，如果我们朝那个方向迈出一步，$\tau$ 现在就会更可能发生）。因此这是一个 $\mathbb{R}^{|\theta|}$ 向量，其中 $|\theta|$ 是参数的个数。
+- 最终得到的向量会被轨迹回报 $G(\tau)$——一个标量——缩放。如果这条轨迹很好（$G(\tau)$ 很大且为正），我们就朝着让它的所有动作都更可能被选中的方向迈步；如果它很糟，就朝相反方向迈步。
 
 这个公式可以通过采样来近似：
 
 $$
-\\nabla_\\theta J(\\theta) \\approx \\frac{1}{N} \\sum_{i=1}^{N} G(\\tau_i) \\sum_{t=0}^{T_i - 1} \\nabla_\\theta \\log \\pi_\\theta (a_t^{(i)} | s_t^{(i)}),
+\nabla_\theta J(\theta) \approx \frac{1}{N} \sum_{i=1}^{N} G(\tau_i) \sum_{t=0}^{T_i - 1} \nabla_\theta \log \pi_\theta (a_t^{(i)} | s_t^{(i)}),
 $$
 
-其中 $\\tau_1, \\ldots, \\tau_N$ 是通过在环境中运行 $\\pi_\\theta$ 采样得到的轨迹。
+其中 $\tau_1, \ldots, \tau_N$ 是通过在环境中运行 $\pi_\theta$ 采样得到的轨迹。
 
 由此得到以下算法，通常称为**简单策略梯度**（Simple Policy Gradient，SPG，[Achiam 2018]）：
 
@@ -93,9 +93,46 @@ $$
 loss = -(policy(obs).log_prob(act)*weight).mean()
 ```
 
-其中 `obs` 和 `act` 是采样轨迹的状态与动作，在 SPG 中 `weight` 就是 $G(\\tau)$。梯度将由 `torch.autograd` 计算。
+其中 `obs` 和 `act` 是采样轨迹的状态与动作，在 SPG 中 `weight` 就是 $G(\tau)$。梯度将由 `torch.autograd` 计算。
 
 这个量之所以被称为“损失”，只是类比监督学习的叫法，但不应把它当作通常意义上的损失：
 
-- 它的数值大小不携带任何关于策略表现好坏的信息。虽然 `grad(loss)` 确实指向 $\\nabla_\\theta J(\\theta)$ 的反方向，但这并不意味着 `loss` 的值就是 $J(\\theta)$。
-- 即使作为一种梯度信号，它也只在收集数据时所使用的那些参数处才有效。批中存储的轨迹 `(obs, act)` 是从旧策略采样得到的，而策略梯度定理要求期望必须在同一条策略下计算。因此，在这批数据上迈出的**第一步**梯度步，估计是正确的；但如果我们在同一批数据上再迈出第二步梯度步，$\\theta$ 已经移动了，`grad(loss)` 将不再是对 $\\nabla_\\theta J(\\theta)$ 的估计。这使得策略梯度方法本质上属于**同策略**（on-policy）方法，这也是它们往往不如上一章中异策略 Q-learning 方法数据高效的原因之一（无法使用回放缓冲区）。
+- 它的数值大小不携带任何关于策略表现好坏的信息。虽然 `grad(loss)` 确实指向 $\nabla_\theta J(\theta)$ 的反方向，但这并不意味着 `loss` 的值就是 $J(\theta)$。
+- 即使作为一种梯度信号，它也只在收集数据时所使用的那些参数处才有效。批中存储的轨迹 `(obs, act)` 是从旧策略采样得到的，而策略梯度定理要求期望必须在同一条策略下计算。因此，在这批数据上迈出的**第一步**梯度步，估计是正确的；但如果我们在同一批数据上再迈出第二步梯度步，$\theta$ 已经移动了，`grad(loss)` 将不再是对 $\nabla_\theta J(\theta)$ 的估计。这使得策略梯度方法本质上属于**同策略**（on-policy）方法，这也是它们往往不如上一章中异策略 Q-learning 方法数据高效的原因之一（无法使用回放缓冲区）。
+
+### 4.2.2 策略梯度定理（reward-to-go 形式）— REINFORCE
+
+在定理的弱形式下，轨迹中所有动作都被同一个总回报 $G(\tau)$ 加权：
+
+$$
+G(\tau) \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta (A_t | S_t)
+$$
+
+但这其实讲不通：对于动作 $A_t$，回报 $G(\tau)$ 中包含的奖励 $R_1, R_2, \ldots, R_t$ 是在动作 $A_t$ 被采取之前收集的。这些过去的奖励不可能是由 $A_t$ 造成的。它们对期望的贡献为零，只会增加估计量的方差。
+
+策略梯度定理的 **reward-to-go 形式**给出了一个"更好"的表达式：
+
+$$
+\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T-1} G_t \nabla_\theta \log \pi_\theta (A_t | S_t) \right],
+$$
+
+其中 $G_t$ 与我们在第 3 章中一直使用的 $G_t$ 相同，即累积折扣奖励。
+
+两种表述都是有效的（它们给出相同的期望），因为过去的奖励对期望没有贡献，只会影响其方差。这使得 reward-to-go 形式噪声更小。
+
+这一改进带来了 **REINFORCE** [Williams 1992]，它本质上就是把 SPG 中的 $G(\tau)$ 换成 $G_t$：
+
+> **算法 — REINFORCE**
+> ```
+> 1: 随机初始化策略参数 θ
+> 2: for iteration = 1, ..., M do
+> 3:   用 πθ 收集一批 N 条轨迹 {τi}，i = 1, ..., N
+> 4:   for 每条轨迹 τi do
+> 5:     计算各时刻回报 Gt^{(i)} = Σ_{k=t}^{T_i−1} γ^{k−t} r_{k+1}^{(i)}，∀t
+> 6:   end for
+> 7:   ĝ ← (1/N) Σ_{i=1}^{N} Σ_{t=0}^{T_i−1} Gt^{(i)} ∇θ log πθ(a_t^{(i)} | s_t^{(i)})
+> 8:   θ ← θ + αĝ
+> 9: end for
+> ```
+>
+> **代码**：`little-book-rl/algos/policy_based/reinforce.py`
