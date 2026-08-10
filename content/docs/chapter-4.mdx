@@ -136,3 +136,73 @@ $$
 > ```
 >
 > **代码**：`little-book-rl/algos/policy_based/reinforce.py`
+
+### 4.2.3 基线减法（Baseline subtraction）— VPG
+
+虽然 REINFORCE 给出的估计比 SPG 方差更小，但它仍然很嘈杂。一种常见的方差缩减（variance reduction）技术，是从回报 $G_t$ 中减去一个基线 $b(S_t)$：
+
+$$
+\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T-1} \bigl( G_t - b(S_t) \bigr) \nabla_\theta \log \pi_\theta (A_t | S_t) \right]
+$$
+
+只要 $b(S_t)$ 不依赖于 $A_t$，期望就保持不变，因此对任意选择的 $b(S_t)$，梯度估计量都是无偏的。但方差依赖于 $b$，一个选得好的基线可以让估计量不那么嘈杂。
+
+确实，考虑 $X = \pm 1$ 各以 $1/2$ 的概率取值，并令 $Y = 100 \pm 1$。我们想估计 $\mu = \mathbb{E}[XY]$。真实值为
+
+$$
+\mathbb{E}[XY] = \mathbb{E}[X]\mathbb{E}[Y] = 0.
+$$
+
+朴素估计量 $\hat{\mu} = XY$ 取值为 $\pm 99$ 或 $\pm 101$，因此方差为：
+
+$$
+\frac{1}{4}\left(99^2 + 101^2 + 99^2 + 101^2\right) = 10{,}001.
+$$
+
+如果我们改用修正后的估计量 $\tilde{\mu} = X(Y - b)$，取 $b = 100$，它的期望仍然是零，但此时 $\tilde{\mu} = X(Y - 100) = \pm 1$，所以它的方差仅为
+
+$$
+\frac{1}{4}(1 + 1 + 1 + 1) = 1.
+$$
+
+而事实上，在实践中优化这两个估计量会得到截然不同的曲线：
+
+> 图 4.2：两个估计量的收敛情况：$\hat{\mu} = XY$（蓝色）与 $\tilde{\mu} = X(Y - 100)$（橙色）。
+
+变量 $Y$ 有一个很大的均值（100）和一个很小的波动（$\pm 1$）。用一个中心化的变量 $X$ 去乘 $Y$，会把那个大均值放大成估计量中 $\pm 100$ 的摆动，尽管该均值并不携带任何关于我们所关心量的信息（它会在期望中被 $\mathbb{E}[X] = 0$ 消掉）。在相乘之前减去 $Y$ 的均值，可以去除这个寄生摆动，只留下有用的信号。同样的论证可以搬到策略梯度的情形：$X$ 扮演 $\nabla_\theta \log \pi_\theta (A_t | S_t)$（中心化后）的角色，而 $Y$ 扮演 $G_t$（大均值、更小的与动作相关的波动）的角色。
+
+一个自然的选择是 $b(S_t) = V^{\pi_\theta}(S_t)$，即当前策略的价值函数：它表示在 $\pi_\theta$ 下从 $S_t$ 出发的平均回报。于是有
+
+$$
+\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T-1} \bigl( G_t - V^{\pi_\theta}(S_t) \bigr) \nabla_\theta \log \pi_\theta (A_t | S_t) \right].
+$$
+
+也就是说，我们按一个动作"比预期好多少"的比例来增加它的概率。我们常用**优势**（advantage）来指称这个量：
+
+$$
+A_t = G_t - V^{\pi_\theta}(S_t),
+$$
+
+它衡量动作 $A_t$ 比平均水平好多少。
+
+得益于第 3 章，我们知道如何估计 $V^{\pi_\theta}$。因此我们引入第二个神经网络 $V_\phi$，与 $\pi_\theta$ 一起训练，用来估计当前策略的价值函数。策略网络通常被称为**演员**（actor），价值网络被称为**评论家**（critic），由此产生的算法家族被称为**演员-评论家**（actor-critic）。
+
+于是我们得到**朴素策略梯度**（Vanilla Policy Gradient，VPG）算法：
+
+> **算法 — VPG**
+> ```
+> 1: 初始化策略参数 θ 与评论家参数 ϕ
+> 2: for iteration = 1, ..., M do
+> 3:   用 πθ 收集一批 N 条轨迹 {τi}，i = 1, ..., N
+> 4:   for 每条轨迹 τi do
+> 5:     计算各时刻回报 Gt^{(i)} = Σ_{k=t}^{T_i−1} γ^{k−t} r_{k+1}^{(i)}，∀t
+> 6:     计算各时刻优势 At^{(i)} = Gt^{(i)} − Vϕ(s_t^{(i)})，∀t
+> 7:   end for
+> 8:   策略更新：
+> 9:     θ ← θ + α (1/N) Σ_{i=1}^{N} Σ_{t=0}^{T_i−1} At^{(i)} ∇θ log πθ(a_t^{(i)} | s_t^{(i)})
+> 10:  评论家更新：
+> 11:    ϕ ← ϕ − β ∇ϕ (1/N) Σ_{i=1}^{N} Σ_{t=0}^{T_i−1} (1/2)(Gt^{(i)} − Vϕ(s_t^{(i)}))²
+> 12: end for
+> ```
+>
+> **代码**：`little-book-rl/algos/policy_based/vpg.py`
