@@ -1,5 +1,5 @@
 {
-  "current": "chapter-4/4.2.4",
+  "current": "chapter-4/4.2.5",
   "completed": [
     "chapter-1",
     "chapter-2/2.1",
@@ -20,10 +20,10 @@
     "chapter-4/4.2",
     "chapter-4/4.2.1",
     "chapter-4/4.2.2",
-    "chapter-4/4.2.3"
+    "chapter-4/4.2.3",
+    "chapter-4/4.2.4"
   ],
   "pending": [
-    "chapter-4/4.2.4",
     "chapter-4/4.2.5",
     "chapter-4/4.3",
     "chapter-4/4.3.1",
