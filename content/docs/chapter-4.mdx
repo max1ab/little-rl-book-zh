@@ -206,3 +206,54 @@ $$
 > ```
 >
 > **代码**：`little-book-rl/algos/policy_based/vpg.py`
+
+### 4.2.4 广义优势估计（Generalized Advantage Estimation）— GAE
+
+到目前为止，我们一直把优势估计为 $A_t = G_t − V(S_t)$。这个估计是无偏的（假定 $V$ 正确），但它继承了 $G_t$ 的高方差——$G_t$ 本身只是一长串随机奖励之和的单个蒙特卡洛样本。
+
+我们可以用回报的自举估计来把一部分方差换成偏差，正如我们在第 3 章从 MC 过渡到 TD 方法时做的那样。优势的一步 TD 估计为
+
+$$
+A_t^{(1)} = R_{t+1} + \gamma V(S_{t+1}) − V(S_t) =: \delta_t,
+$$
+
+这正是 TD 误差。k 步估计为
+
+$$
+A_t^{(k)} = \sum_{l=0}^{k-1} \gamma^l R_{t+l+1} + \gamma^k V(S_{t+k}) − V(S_t),
+$$
+
+当 $k$ 增大到 $T − t$ 时，我们就恢复出蒙特卡洛优势 $G_t − V(S_t)$。较小的 $k$ 方差低、偏差高（我们非常信任 $V$），而较大的 $k$ 方差高、偏差低（我们非常信任真实的奖励）。
+
+正如我们在 3.7 节的 TD(λ) 中所见，与其挑选某一个 $k$，广义优势估计器（Generalized Advantage Estimator，GAE）[Schulman, Moritz, et al. 2016] 对所有 k 步估计取指数加权平均：
+
+$$
+A_t^{\text{GAE}} = (1−\lambda)\left( A_t^{(1)} + \lambda A_t^{(2)} + \lambda^2 A_t^{(3)} + \cdots \right) = \sum_{l=0}^{\infty} (\gamma\lambda)^l \delta_{t+l}
+$$
+
+其中 $\delta_t = R_{t+1} + \gamma V(S_{t+1}) − V(S_t)$。$\gamma \in [0, 1]$ 和 $\lambda \in [0, 1]$ 共同控制偏差-方差权衡：
+
+- 可以把 $\gamma$ 看作一种通过降低所有未来奖励的权重来减小方差的手段。$\gamma < 1$ 会引入偏差。
+- 而 $\lambda < 1$ 只在 $V$ 估计得不好时才引入偏差。
+
+在实践中，$\lambda$ 通常取 0.95 左右，GAE 已成为现代策略梯度实现中的默认优势估计器。它可以通过沿轨迹的一次反向遍历高效计算，利用递推
+
+$$
+A_t^{\text{GAE}} = \delta_t + \gamma\lambda A_{t+1}^{\text{GAE}},
+$$
+
+其中在回合结束时 $A_T^{\text{GAE}} = 0$。
+
+由此得到如下的演员更新：
+
+$$
+\theta \leftarrow \theta + \alpha \frac{1}{N} \sum_i \sum_t A_t^{\text{GAE}(i)} \nabla_\theta \log \pi_\theta(a_t^{(i)} | s_t^{(i)})
+$$
+
+与 VPG 相比，唯一的变化在于优势估计器。对于评论家，通常也会改用 **λ 回报**（λ-return）目标来减小方差。由于有关系式 $A_t^{\text{GAE}} = G_t^\lambda − V_\phi(S_t)$，λ 回报几乎无需额外成本即可得到，于是我们可以给出如下的评论家更新：
+
+$$
+\phi \leftarrow \phi − \beta \nabla_\phi \frac{1}{N} \sum_i \sum_t \frac{1}{2} \left( \operatorname{sg}\left( A_t^{\text{GAE}(i)} + V_\phi(s_t^{(i)}) \right) − V_\phi(s_t^{(i)}) \right)^2
+$$
+
+其中 sg 表示**停止梯度**（stop-gradient）算子：括号内的表达式用当前参数计算，但在求导时被当作常数处理。
