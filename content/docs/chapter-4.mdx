@@ -279,3 +279,65 @@ $$
 此前的策略梯度算法利用策略梯度定理得到 $\nabla_\theta J(\theta)$ 的估计量，然后应用梯度上升。信赖域方法则采取了不同的出发点：与其对 $J$ 求导，不如考察候选新策略与当前策略之间的差 $J(\theta) − J(\theta_{\text{old}})$，并发现它可以写成一种能被代理目标 $L_{\theta_{\text{old}}}(\theta)$ 逼近的形式，而这个代理目标仅凭 $\pi_{\theta_{\text{old}}}$ 的轨迹采样（rollout）即可估计。代理目标只在 $\theta_{\text{old}}$ 的邻域内是准确的，因此得名“信赖域”：即我们信任代理目标的那片围绕 $\theta_{\text{old}}$ 的区域。
 
 这让我们能从每一批轨迹中榨取最多的价值：现在我们有了一个显式的目标，只要停留在信赖域内，就可以在其上优化多步。相反，在策略梯度方法中我们不得不更加保守：理论上没有任何依据支持在同一批数据上迈出多个梯度步，因为梯度估计量只对产生这批数据的策略有效。
+
+### 4.3.1 性能差引理（Performance difference lemma）
+
+出发点是一个联系两条策略回报的精确恒等式。对任意策略 $\pi_\theta$ 与 $\pi_{\theta_{\text{old}}}$：
+
+$$
+J(\theta) - J(\theta_{\text{old}}) = \frac{1}{1-\gamma} \mathbb{E}_{s \sim d^{\pi_\theta},\, a \sim \pi_\theta} \left[ A^{\pi_{\theta_{\text{old}}}}(s, a) \right],
+$$
+
+其中 $d^\pi(s)$ 是由 $\pi$ 诱导的归一化状态访问分布（normalized state visitation distribution）[Schulman, Levine, et al. 2015]。这个公式表明，$\pi_\theta$ 与 $\pi_{\theta_{\text{old}}}$ 之间的性能差，等于用旧评论家来评估新策略。因此，要想让 $\pi_\theta$ 优于 $\pi_{\theta_{\text{old}}}$，我们希望 $\pi_\theta$ 把概率质量放在那些在 $\pi_{\theta_{\text{old}}}$ 下优势为正的动作上。
+
+> 图 4.6：参数空间中利用 rollout 数据的两种方式。策略梯度方法（左）对每批轨迹只走一步，必须用新策略重新采样才能继续。信赖域方法（右）在单批数据上走 $K$ 步，停留在代理目标 $L_{\theta_{\text{old}}}$ 仍然可信的区域内。
+
+这个恒等式是精确的，但还不是我们想要的：期望是对新策略的访问分布求的，而如果不先在环境中 rollout $\pi_\theta$，我们就无法从中采样；而整个要点恰恰在于要在下一次 rollout 之前选定 $\theta$。因此，我们将构造一个代理目标 $L_{\theta_{\text{old}}}(\theta) \approx J(\theta) - J(\theta_{\text{old}})$。
+
+**第一步：状态分布近似。** 我们直接把 $d^{\pi_\theta}$ 换成 $d^{\pi_{\theta_{\text{old}}}}$：
+
+$$
+L_{\theta_{\text{old}}}(\theta) := \frac{1}{1-\gamma} \mathbb{E}_{s \sim d^{\pi_{\theta_{\text{old}}}},\, a \sim \pi_\theta} \left[ A^{\pi_{\theta_{\text{old}}}}(s, a) \right].
+$$
+
+这个代理目标的近似误差会随着 $\pi_\theta$ 访问与 $\pi_{\theta_{\text{old}}}$ 不同的状态的程度增大而增大。因此，这一近似本身就决定了 $\pi_{\theta_{\text{old}}}$ 周围必然存在一个信赖域。
+
+**第二步：重要性采样。** 期望仍然要求从 $\pi_\theta$ 采样动作。我们利用对 $\pi_{\theta_{\text{old}}}$ 的重要性采样来重写它：
+
+$$
+L_{\theta_{\text{old}}}(\theta) = \frac{1}{1-\gamma} \mathbb{E}_{s \sim d^{\pi_{\theta_{\text{old}}}},\, a \sim \pi_{\theta_{\text{old}}}} \left[ \frac{\pi_\theta(a | s)}{\pi_{\theta_{\text{old}}}(a | s)} A^{\pi_{\theta_{\text{old}}}}(s, a) \right].
+$$
+
+<Callout title="提醒：重要性采样">
+  当我们只能在分布 $q$ 下采样，却要估计分布 $p$ 下的期望时，使用恒等式
+
+$$
+\mathbb{E}_{x \sim p} f(x) = \mathbb{E}_{x \sim q} \left[ \frac{p(x)}{q(x)} f(x) \right],
+$$
+
+  只要在 $p(x) > 0$ 的地方都有 $q(x) > 0$，该式就成立。比值 $p(x)/q(x)$ 修正了从 $q$ 而非 $p$ 采样引入的偏差。
+</Callout>
+
+现在，一切都可以从 $\pi_{\theta_{\text{old}}}$ 采集的一批轨迹估计出来了。
+
+只有当 $\pi_\theta$ 与 $\pi_{\theta_{\text{old}}}$ 接近时，我们才能信任 $L_{\theta_{\text{old}}}(\theta)$。事实上，如果天真地把 $L_{\theta_{\text{old}}}(\theta)$ 最大化到收敛，我们很可能会落在一个 $d^{\pi_\theta} \to d^{\pi_{\theta_{\text{old}}}}$ 的替换已不准确的 $\theta$ 上，此时真实的回报 $J(\theta)$ 甚至可能下降。
+
+这便给出了带约束的优化问题：
+
+$$
+\max_\theta L_{\theta_{\text{old}}}(\theta) \qquad \text{s.t.} \qquad \pi_\theta \text{ 与 } \pi_{\theta_{\text{old}}} \text{ 接近}.
+$$
+
+即
+
+$$
+\max_\theta \; \mathbb{E}_{s \sim d^{\pi_{\theta_{\text{old}}}},\, a \sim \pi_\theta} \left[ \frac{\pi_\theta(a|s)}{\pi_{\theta_{\text{old}}}(a|s)} A^{\pi_{\theta_{\text{old}}}}(s, a) \right] \qquad \text{s.t.} \qquad \pi_\theta \approx \pi_{\theta_{\text{old}}}.
+$$
+
+对“接近”的不同强制方式会给出不同的算法。TRPO [Schulman, Levine, et al. 2015] 使用显式的 KL 约束
+
+$$
+\mathbb{E}_{s \sim d^{\pi_{\theta_{\text{old}}}}} D_{\text{KL}}(\pi_{\theta_{\text{old}}} \| \pi_\theta) \le \delta,
+$$
+
+通过对 KL 的二次近似做一步共轭梯度（conjugate-gradient）来求解。它有效，但实现起来很重，也难以扩展。PPO [Schulman, Wolski, et al. 2017] 用一个简单得多的代理来替代这个约束。
