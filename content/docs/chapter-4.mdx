@@ -341,3 +341,77 @@ $$
 $$
 
 通过对 KL 的二次近似做一步共轭梯度（conjugate-gradient）来求解。它有效，但实现起来很重，也难以扩展。PPO [Schulman, Wolski, et al. 2017] 用一个简单得多的代理来替代这个约束。
+
+### 4.3.2 PPO（近端策略优化）
+
+PPO 对前面的目标做了如下修改：
+
+$$
+L^{\text{CLIP}}(\theta) = \mathbb{E}_{\pi_{\theta_{\text{old}}}} \left[ \min\left( \rho_t(\theta) \hat{A}_t,\; \text{clip}\left(\rho_t(\theta), 1-\epsilon, 1+\epsilon\right) \hat{A}_t \right) \right]
+$$
+
+其中 $\rho_t(\theta) = \frac{\pi_\theta(A_t | S_t)}{\pi_{\theta_{\text{old}}}(A_t | S_t)}$ 是重要性比率（importance ratio），$\hat{A}_t$ 是一个优势估计器（通常是 GAE，见 4.2.4 节），而 $\epsilon$ 是一个小常数（通常取 0.1 或 0.2），称为裁剪参数（clip parameter）。
+
+直觉是限制每个动作在目标方向上可以被推多远：
+
+- 如果 $\hat{A}_t > 0$，我们希望增大 $\pi_\theta(A_t | S_t)$，于是 $\rho_t$ 趋于增大。裁剪把增益限制在 $\rho_t = 1 + \epsilon$：超过之后，梯度为零。
+- 如果 $\hat{A}_t < 0$，我们希望减小 $\pi_\theta(A_t | S_t)$，于是 $\rho_t$ 趋于缩小。裁剪把损失限制在 $\rho_t = 1 − \epsilon$。
+- 两种情况下，当 $\rho_t$ 逆着 $\hat{A}_t$ 的符号漂出信赖域时（例如 $\hat{A}_t > 0$ 而 $\rho_t < 1 − \epsilon$），min 会选取未裁剪的那一项，从而梯度保持非零，把策略拉回来。
+
+因此 PPO 实现了一个软信赖域（soft trust region）：策略在任意单个样本上都被温和地阻止移动过远。
+
+PPO 会在同一批数据上执行若干次梯度步（通常约 5 个轮次，epoch），每次都复用相同的数据。随着更新不断累积，比率开始撞上裁剪边界，这些样本上的梯度被置零，从而减缓 $\theta$ 与 $\theta_{\text{old}}$ 之间的漂移。算法的其余结构与带 GAE 的 VPG 相同：
+
+> **算法 — PPO**
+> ```
+> 1: 初始化策略参数 θ 与评论家参数 ϕ
+> 2: for iteration = 1, ..., M do
+> 3:   用 πθ 收集一批 N 条轨迹 {τi}，i = 1, ..., N
+> 4:   for 每条轨迹 τi do
+> 5:     用 Vϕ 通过 GAE 计算 ∀t 的优势 Ât^(i)
+> 6:   end for
+> 7:   令 θold ← θ，并缓存 log πθold(a_t^(i) | s_t^(i))
+> 8:   for epoch = 1, ..., K do
+> 9:     for 每个大小为 B 的小批量 B do
+> 10:      ρt^(i) ← exp(log πθ(a_t^(i) | s_t^(i)) − log πθold(a_t^(i) | s_t^(i)))
+> 11:      策略更新：
+> 12:        θ ← θ + α ∇θ (1/|B|) Σ_{(i,t)∈B} min(ρt^(i) Ât^(i), clip(ρt^(i), 1−ϵ, 1+ϵ) Ât^(i))
+> 13:      评论家更新：
+> 14:        ϕ ← ϕ − β ∇ϕ (1/|B|) Σ_{(i,t)∈B} (1/2)(sg(Ât^(i) + Vϕ(s_t^(i))) − Vϕ(s_t^(i)))²
+> 15:     end for
+> 16:   end for
+> 17: end for
+> ```
+>
+> **代码**：`little-book-rl/algos/policy_based/ppo.py`
+
+<Callout title="提醒：PPO 与 VPG 的联系">
+值得指出的是，PPO 的第一步梯度步（此时处处 $\rho_t = 1$）恢复出的正是 4.2.3 节中带优势的 VPG 策略梯度，尽管推导走的是性能差引理而非策略梯度定理。
+
+另外，虽然我们可以复用旧策略采集的同一批数据来更新当前策略，但我们仍主要把 PPO 称为同策略（on-policy）方法，因为代理目标只对与产生数据的那条策略足够接近的策略成立。
+
+最后，细心的读者可能已经注意到，PPO 每次迭代执行的梯度步数并不是 $K$，而是 $K \times \text{num\_minibatches}$：在每个轮次中，采集到的批次会被打乱并拆分成若干小批量（minibatch），每个小批量各执行一次梯度步。这使得每个批次能获得更多更新，而裁剪比率让这一点成为可能。
+</Callout>
+
+<Callout title="提醒：实现细节">
+特定 PPO 代码库（或任何深度 RL 算法）都有大量我们有意省略的实现细节。有几点值得一提：
+
+- **定义采集周期。** 每次更新前应该采集 $N$ 条完整回合还是 $T$ 个时间步？固定回合数更贴近教科书定义，但每次更新的墙钟（wall-clock）开销会随回合长度随策略变化而波动。固定 $T$ 个时间步更常见，因为它给每次迭代一个恒定的计算预算，也更自然地适配向量化环境，代价是必须在最后（被截断的）一步上用 $V(s_T)$ 自举（bootstrap）。
+- **终止 vs. 截断。** 终止状态的 $V(s_T) = 0$，而时间上限截断则需要用评论家的估计自举。有些实现把截断当作终止来处理。
+
+本书补充材料中的 PPO 实现列出了这里展示的伪代码与 CleanRL 的 PPO 之间的差异。另可参见 Huang et al. (2022)《The 37 Implementation Details of PPO》，那里有一份详尽的清单。
+</Callout>
+
+#### 示例：Atari Breakout
+
+与 DQN 类似，我们把 PPO 应用到 Atari Breakout 环境上。结果如下：
+
+> 图 4.7：PPO 在 Atari Breakout 环境上获得的奖励。
+
+监控策略损失几乎得不到什么信息：
+
+> 图 4.8：训练期间的策略损失。
+
+但策略的熵更有意思，因为它显示了策略变得有多确定（从而也说明它是否仍在演化）：
+
+> 图 4.9：训练期间策略的熵。
