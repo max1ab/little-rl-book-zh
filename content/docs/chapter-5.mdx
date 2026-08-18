@@ -34,3 +34,25 @@ RL 之所以可能比 SFT 更可取，是因为它能学到从未被示范过的
 - 转移是确定性的拼接：$S_{t+1} = (S_t, A_t)$。
 
 我们保留一个参考策略（reference policy）$\pi_{\text{ref}}$，通常是我们起步所用的 SFT 模型。大多数 LLM RL 目标都包含一个 KL 惩罚 $\beta \cdot D_{KL}(\pi_\theta \| \pi_{\text{ref}})$，使训练后的策略保持接近它。这个正则化项可以防止策略坍缩到退化的 token 分布——那种利用奖励却无法生成可读文本的分布。
+
+## 5.2 从 PPO 到 GRPO
+
+动作空间很大、奖励稀疏且时间跨度（horizon）很长，因此像 DQN 这样的方法通常并不合适，于是人们使用策略优化方法，尤其是信赖域方法。把 PPO 应用到前面的设置中，得到：
+
+$$
+J^{\text{PPO}}(\theta) = \mathbb{E}_{\substack{x \sim D \\ y \sim \pi_{\theta_{\text{old}}}}} \left[ \sum_{t=1}^{|y|} \min\left( \rho_t(\theta) \hat{A}_t,\; \text{clip}\left(\rho_t(\theta), 1-\epsilon, 1+\epsilon\right) \hat{A}_t \right) \right]
+$$
+
+其中 $\rho_t(\theta) = \frac{\pi_\theta(y_t | x, y_{<t})}{\pi_{\theta_{\text{old}}}(y_t | x, y_{<t})}$ 是逐 token 的重要性比率，$\hat{A}_t$ 是由学习得到的价值函数 $V_\phi$ 计算的 GAE 优势，该价值函数通常与策略一样大。这样的评论家在内存上开销很大，也难以训练，因为奖励是稀疏的，而且只在相当长的轨迹结束时才可获得。
+
+GRPO（Group Relative Policy Optimization，组相对策略优化 [Shao et al. 2024; DeepSeek-AI 2025]）去掉了评论家，代之以多次运行同一个提示，得到一组输出 $\{y_1, \ldots, y_G\}$。这一组输出得到奖励 $R = \{R_1, \ldots, R_G\}$。然后，每条响应的优势按 $\hat{A}_{i,t} = R_i - \text{mean}(R)$ 计算。
+
+把这个优势代入 PPO 的裁剪代理目标，在组上取平均，再加上对 $\pi_{\text{ref}}$ 的逐 token KL 惩罚，就得到 GRPO 目标：
+
+$$
+J^{\text{GRPO}}(\theta) = \mathbb{E}_{\substack{x \sim D \\ \{y_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}(\cdot|x)}} \left[ \frac{1}{G} \sum_{i=1}^{G} \sum_{t=1}^{|y_i|} \min\left( \rho_{i,t}(\theta) \hat{A}_i,\; \text{clip}\left(\rho_{i,t}(\theta), 1-\epsilon, 1+\epsilon\right) \hat{A}_i \right) - \beta D_{KL}(\pi_\theta \| \pi_{\text{ref}}) \right]
+$$
+
+其中 $\rho_{i,t}(\theta) = \frac{\pi_\theta(y_{i,t} | x, y_{i,<t})}{\pi_{\theta_{\text{old}}}(y_{i,t} | x, y_{i,<t})}$。因此，GRPO 不再是一种演员-评论家方法，但它仍然是一种信赖域方法。
+
+虽然 GRPO 是在 LLM 的 RL 背景下提出的，但它是一个通用的 RL 算法，可以应用于任何满足以下要求的环境：(1) 只有终端奖励可用；(2) 我们能够从同一个起始状态启动多次轨迹采样（rollout）。
