@@ -56,3 +56,45 @@ $$
 其中 $\rho_{i,t}(\theta) = \frac{\pi_\theta(y_{i,t} | x, y_{i,<t})}{\pi_{\theta_{\text{old}}}(y_{i,t} | x, y_{i,<t})}$。因此，GRPO 不再是一种演员-评论家方法，但它仍然是一种信赖域方法。
 
 虽然 GRPO 是在 LLM 的 RL 背景下提出的，但它是一个通用的 RL 算法，可以应用于任何满足以下要求的环境：(1) 只有终端奖励可用；(2) 我们能够从同一个起始状态启动多次轨迹采样（rollout）。
+
+## 5.3 超越 GRPO
+
+从 GRPO 出发，人们已经做出了一些观察，也提出了一些改进。
+
+**新能力？** 一些工作表明，RLVR 只能激发（elicit）基座模型中已经存在的能力。Yue et al. (2025) 展示了一些设置，其中 RL 只提高了 pass@1 分数，却没有提高 pass@8 分数，这表明 RL 只是学会了更好地采样模型中已经存在的答案。这远非共识，因为后来的工作表明，经过长时间的 RL 训练和多样化的任务组合，模型确实能在较大的 k 值上于 pass@k 超越其基座模型 [Liu et al. 2025; Cursor Research 2026]。
+
+**高熵 token。** RLVR 训练主要影响高熵 token（模型对其不确定的 token）[Wang et al. 2025]。这些通常代表推理路径中的分叉 token（forking tokens），例如 "therefore"、"perhaps" 或 "however"。
+
+> 图 5.1：从高熵分布生成的 token。摘自 Wang et al. (2025) 的图 2。
+
+人们提出了不同的策略来进一步增强 RL 对这些 token 的影响。大多数策略是提高裁剪比率的上限，以允许对这些 token 进行更激进的更新（DAPO、JustRL、Lite-PPO、MiniRL）。另一些策略则限制对这些 token 的更新。这些策略也有助于减缓策略熵的下降。
+
+**长度归一化。** 原始 GRPO 目标按每条轨迹的长度（$1/|y_i|$）对轨迹梯度降权，从而在轨迹之间对每个 token 赋予相等的权重。对一些人（DAPO、Dr. GRPO）来说，这是从监督学习延续下来的错误，没有理由出现在这里，因为它使答案偏向更短的正面轨迹或更长的负面轨迹。另一些人则认为这是一个有用的偏置，可以促进长答案的产生，从而鼓励推理链的出现。
+
+**奖励塑形（reward shaping）。** 一条活跃的研究线引入了显式的与长度相关的奖励项，其动机是观察到推理模型即使在琐碎的提示上也会过度扩展其思维链（chain of thought，CoT）[Chen et al. 2025]。最简单的方案是对响应的长度施加恒定惩罚。过早或过强地施加这种惩罚往往会压垮探索和准确率。更精细的方案（如 Cursor Composer 2）会根据任务难度调整长度惩罚，使模型在简单提示上被迫保持简洁，而在问题需要时则可以思考更久。
+
+> 图 5.2：生成 rollout 第 n 个 token 所付出的惩罚。蓝色为恒定惩罚，红色为 Composer 2。
+
+**动态采样。** 一些设置（DAPO、INTELLECT-3）确保训练提示能产生有用的学习信号。这可以在批次内完成（过滤掉那些 rollout 全对或全错的提示），也可以在更长的时间跨度上完成（课程式采样（curriculum-style sampling），逐步偏向更难的提示）。
+
+**序列级目标。** 由于在回合（episode）的最末端只能获得一个奖励，MDP 可以在序列层面重新表述：
+
+$$
+J^{\text{GRPO,seq}}(\theta) = \mathbb{E}_{\substack{x \sim D \\ \{y_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}(\cdot|x)}} \left[ \frac{1}{G} \sum_{i=1}^{G} \min\left( s_i(\theta) \hat{A}_i,\; \text{clip}\left(s_i(\theta), 1-\epsilon, 1+\epsilon\right) \hat{A}_i \right) \right]
+$$
+
+也就是说，不再把每个生成的 token 视为一个动作，而是把整个序列的生成视为单个动作。于是，一条轨迹由单个转移（transition）构成，只有一个状态 x（提示）和一个动作（整个响应 y），以及那个奖励。此时重要性比率为：
+
+$$
+s_i(\theta) = \frac{\pi_\theta(y_i | x)}{\pi_{\theta_{\text{old}}}(y_i | x)} = \prod_t \rho_{i,t}(\theta)
+$$
+
+这是一个可以做出的有效选择，但实践中并不会照此使用，因为序列级重要性比率的方差会随 $|y_i|$ 成倍增长，容易导致不稳定，也使裁剪范围 $[1-\epsilon, 1+\epsilon]$ 难以在不同长度的 rollout 之间校准。由此：
+
+- Zheng et al. (2025) 表明，使用 token 级目标实际上是序列级目标在 $\theta \approx \theta_{\text{old}}$ 时成立的一种近似。他们认为，序列级目标对 RLVR 而言更有理论依据。例如，在序列级目标下，（初始）状态分布对任何策略都是相同的，因为它只依赖于数据集，因此底层的信赖域近似 $d^{\pi_\theta} \approx d^{\pi_{\theta_{\text{old}}}}$ 由近似变为精确。
+
+- GSPO（可能还有 DeepSeek-R1）优化的是序列级目标，但用长度归一化版本替换了重要性比率，以缓解上面提到的方差问题：
+
+$$
+s_i(\theta) = \left( \frac{\pi_\theta(y_i | x)}{\pi_{\theta_{\text{old}}}(y_i | x)} \right)^{1/|y_i|}
+$$
