@@ -98,3 +98,38 @@ $$
 $$
 s_i(\theta) = \left( \frac{\pi_\theta(y_i | x)}{\pi_{\theta_{\text{old}}}(y_i | x)} \right)^{1/|y_i|}
 $$
+
+## 5.4 RL 基础设施
+
+尽管 GRPO 的伪代码不到 30 行，但实现一个高效的 RLVR 训练循环仍是一项庞大的系统工程 [Team Olmo et al. 2025; Prime Intellect Team et al. 2025]。它依赖两个主要组件：
+
+- **训练器（trainer）**：消费一批批经验并运行 GRPO（或其他算法）来更新策略权重。
+- **推理引擎（inference engine）**：通过在环境中执行策略来收集 rollout。它可能涉及工具使用（如网络请求）或代码执行。
+
+每个组件通常运行在多台互联的 GPU 节点上。因此，这个过程混合了两种截然不同的工作负载：训练（计算密集，compute-bound）和推理（内存带宽密集，memory-bandwidth-bound），各自使用不同的框架（Megatron 或 TorchTitan，对应 vLLM 或 SGLang）。两者必须相互通信并协调调度，以尽量减少任何一侧的空闲时间。另一个困难在于：随着训练推进，策略倾向于生成更长的 rollout（更长的推理链、更多的工具调用……），而注意力机制的成本随序列长度呈二次增长，这使得推理变得不成比例地昂贵。
+
+> 图 5.3：RLVR 训练循环的两个主要组件。每一侧本身都是一组 GPU 节点，其中推理集群分配的 GPU 数量通常是训练器的数倍（例如 3:1 的比例）。
+
+为了提高整体硬件利用率，可以实施多种优化：
+
+- **异步训练与推理（asynchronous training and inference）。** 两个组件并行运行，互不等待。通常，推理引擎在收集完一批 rollout 后，不会等这一批对应的权重更新完成，就开始收集下一批。这使得收集到的 rollout 来自较旧的策略，从而引入了异策略性（off-policyness）。
+- **连续批处理（continuous batching）。** 同一批中不同 rollout 之间的差异很大（响应长度、工具使用……），如果必须等最长的 rollout 结束才能开始下一批，会浪费大量时间。连续批处理会在某个 rollout 槽位（slot）一结束就立刻填入新的任务。
+- **进行中权重更新（in-flight weight updates）。** 该技术让推理引擎持续向训练器轮询新权重，一旦新权重可用就立即采用最新策略。这会导致单个 rollout 由多个策略生成，但在某种意义上限制了异策略性。
+
+这些优化是在硬件效率与算法保真度之间做权衡，尤其体现在异策略性上。
+
+> 图 5.4：RLVR 训练循环中用于提高硬件利用率的各种优化概览。蓝色深浅表示生成每个 rollout 片段时所用的策略。
+
+另一个需要考虑的问题是训练引擎与推理引擎之间的不匹配。专家混合（Mixture of Experts，MoE）会加剧这种不匹配：微小的数值差异就可能把 token 路由到不同的专家，从而进一步放大训练-推理之间的不一致。采样策略（rollout policy）记为 $\mu_\theta$，它与训练策略 $\pi_\theta$ 使用相同的权重，却产生不同的输出，从而使梯度估计产生偏差。一个解决办法 [F. Yao et al. 2025] 是把这个差异计入另一个重要性比率：
+
+$$
+\frac{\pi_{\theta_{\text{old}}}(y_t | x, y_{<t})}{\mu_{\theta_{\text{old}}}(y_t | x, y_{<t})}
+$$
+
+由此得到全局重要性比率：
+
+$$
+\rho_t(\theta) = \frac{\pi_\theta(y_t | x, y_{<t})}{\mu_{\theta_{\text{old}}}(y_t | x, y_{<t})} = \frac{\pi_\theta(y_t | x, y_{<t})}{\pi_{\theta_{\text{old}}}(y_t | x, y_{<t})} \cdot \frac{\pi_{\theta_{\text{old}}}(y_t | x, y_{<t})}{\mu_{\theta_{\text{old}}}(y_t | x, y_{<t})}
+$$
+
+这个比率纠正了动作选择中的不匹配：第一个比率纠正的是“我们执行了多次更新、因此已经偏离旧策略”这一事实（在第 4.3.2 节推导得出），第二个比率纠正的则是训练-推理之间的不匹配。现在的期望以采样策略 $\mu_{\theta_{\text{old}}}$ 为分布，我们用 $\rho_t(\theta)$ 来纠正。
