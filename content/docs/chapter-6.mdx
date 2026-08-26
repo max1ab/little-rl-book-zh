@@ -3,8 +3,6 @@ title: 第 6 章 · AlphaGo Zero
 description: 改进、评估、自我对弈与完整训练闭环。
 ---
 
-<Callout title="翻译中">本章正在从原书 PDF 重建公式与正文。</Callout>
-
 本章旨在以全书已建立的概念为棱镜，对著名的 AlphaGo Zero 算法给出一个高层次的概览。你会发现，AlphaGo Zero 的各组成要素都似曾相识，但它们的组装方式，与我们在基于价值或基于策略这两族算法中所见到的截然不同。
 
 ## 6.1 主要思想
@@ -70,3 +68,11 @@ $$
 - 双人零和（zero-sum）、完美信息（perfect-information）的博弈结构确保：任何一方可被利用的弱点都会受到对称对手的惩罚。
 
 > 图 6.3：AlphaGo Zero 在训练过程中的 Elo 评分。[Silver et al. 2017]
+
+## 6.5 讨论
+
+在测试时，AlphaGo Zero 的行为与训练时如出一辙：它不会直接用策略来选择动作，而是执行上文所述的类 MCTS 改进步骤来选动作。这可以看作一种测试时计算（test-time compute）的形式。
+
+> 图 6.4：使用基策略（"Raw Network"）远不如使用搜索改进后的策略（"AlphaGo Zero"）有效——基策略对阵其改进版时，输棋的概率超过 99.99%。[Silver et al. 2017]
+
+AlphaGo Zero 的这套配方（被称为 AlphaZero）因此非常强大，但它依赖于一组特定的前提条件：已知或可学习的动力学、易于处理的动作空间，以及廉价的模拟 rollout。当这些条件成立时，它能极其出色地迁移到其他领域（AlphaTensor、AlphaDev、AlphaProof、Aristotle）；但它远非适用于任意场景的即插即用配方。例如，人们一直在大力尝试将其应用于 LLM 训练，但迄今尚未取得明确公开的成功 [S. Yao et al. 2023; Hao et al. 2023]。
