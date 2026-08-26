@@ -1,5 +1,5 @@
 {
-  "current": "chapter-6/6.5",
+  "current": null,
   "completed": [
     "chapter-1",
     "chapter-2/2.1",
@@ -35,11 +35,10 @@
     "chapter-6/6.1",
     "chapter-6/6.2",
     "chapter-6/6.3",
-    "chapter-6/6.4"
-  ],
-  "pending": [
+    "chapter-6/6.4",
     "chapter-6/6.5"
   ],
+  "pending": [],
   "metadata": {
     "source_pdf": "source/the-little-book-of-reinforcement-learning.pdf",
     "source_text": "source/book.txt",
